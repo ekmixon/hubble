@@ -3,6 +3,7 @@
 All Hubble configuration loading and defaults should be in this module
 """
 
+
 # Import python libs
 import os
 import re
@@ -50,13 +51,7 @@ _DFLT_LOG_FMT_JID = "[JID: %(jid)s]"
 _DFLT_REFSPECS = ["+refs/heads/*:refs/remotes/origin/*", "+refs/tags/*:refs/tags/*"]
 DEFAULT_INTERVAL = 60
 
-if hubblestack.utils.platform.is_windows():
-    # Since an 'ipc_mode' of 'ipc' will never work on Windows due to lack of
-    # support in ZeroMQ, we want the default to be something that has a
-    # chance of working.
-    _DFLT_IPC_MODE = "tcp"
-else:
-    _DFLT_IPC_MODE = "ipc"
+_DFLT_IPC_MODE = "tcp" if hubblestack.utils.platform.is_windows() else "ipc"
 
 
 def _gather_buffer_space():
@@ -75,7 +70,7 @@ def _gather_buffer_space():
 
         # We need to load up ``mem_total`` grain. Let's mimic required OS data.
         if not hasattr(core, '__opts__'):
-            core.__opts__ = dict()
+            core.__opts__ = {}
         grains = core._memdata(core.os_data())
         total_mem = grains["mem_total"]
     # Return the higher number between 5% of the system memory and 10MiB
@@ -875,7 +870,9 @@ DEFAULT_OPTS = {
     "grains_cache": False,
     "grains_cache_expiration": 300,
     "grains_deep_merge": False,
-    "conf_file": os.path.join(hubblestack.syspaths.CONFIG_DIR, DEFAULT_CONF_FILE_NAME),
+    "conf_file": os.path.join(
+        hubblestack.syspaths.CONFIG_DIR, DEFAULT_CONF_FILE_NAME
+    ),
     "sock_pool_size": 1,
     "backup_mode": "",
     "renderer": "jinja|yaml",
@@ -892,32 +889,32 @@ DEFAULT_OPTS = {
     "pillar_source_merging_strategy": "smart",
     "pillar_merge_lists": False,
     "pillar_includes_override_sls": False,
-    # ``pillar_cache``, ``pillar_cache_ttl`` and ``pillar_cache_backend``
-    # are not used on the minion but are unavoidably in the code path
     "pillar_cache": False,
     "pillar_cache_ttl": 3600,
     "pillar_cache_backend": "disk",
-    "extension_modules": os.path.join(hubblestack.syspaths.CACHE_DIR, "extmods"),
+    "extension_modules": os.path.join(
+        hubblestack.syspaths.CACHE_DIR, "extmods"
+    ),
     "state_top": "top.sls",
     "state_top_saltenv": None,
     "startup_states": "",
     "sls_list": [],
     "top_file": "",
     "file_client": "local",
-    "fileserver_update_frequency": 43200, # 12 hours
-    "grains_refresh_frequency": 3600, # 1 hour
-    "scheduler_sleep_frequency": 0.5, # 500ms
+    "fileserver_update_frequency": 43200,
+    "grains_refresh_frequency": 3600,
+    "scheduler_sleep_frequency": 0.5,
     "default_include": 'hubble.d/*.conf',
-    "logfile_maxbytes": 100000000, # 100MB kindof
-    "logfile_backups": 1, # max rotated logs
+    "logfile_maxbytes": 100000000,
+    "logfile_backups": 1,
     "delete_inaccessible_azure_containers": False,
     "enable_globbing_in_nebula_masking": False,
-    "osquery_logfile_maxbytes": 50000000, # 50MB kindof
-    "osquery_logfile_maxbytes_toparse": 100000000, # 100MB kindof
+    "osquery_logfile_maxbytes": 50000000,
+    "osquery_logfile_maxbytes_toparse": 100000000,
     "osquery_backuplogs_count": 2,
     "local": False,
     "use_master_when_local": False,
-    "file_roots": { "base": list() },
+    "file_roots": {"base": []},
     "top_file_merging_strategy": "merge",
     "env_order": [],
     "default_top": "base",
@@ -930,7 +927,6 @@ DEFAULT_OPTS = {
     "fileserver_followsymlinks": True,
     "fileserver_ignoresymlinks": False,
     "on_demand_ext_pillar": ["libvirt", "virtkey"],
-    # Update intervals
     "roots_update_interval": DEFAULT_INTERVAL,
     "azurefs_update_interval": DEFAULT_INTERVAL,
     "gitfs_update_interval": DEFAULT_INTERVAL,
@@ -1004,7 +1000,9 @@ DEFAULT_OPTS = {
     "tcp_pub_port": 4510,
     "tcp_pull_port": 4511,
     "tcp_authentication_retries": 5,
-    "log_file": os.path.join(hubblestack.syspaths.LOGS_DIR, DEFAULT_LOG_FILE_NAME),
+    "log_file": os.path.join(
+        hubblestack.syspaths.LOGS_DIR, DEFAULT_LOG_FILE_NAME
+    ),
     "log_level": "error",
     "log_level_logfile": None,
     "log_datefmt": _DFLT_LOG_DATEFMT,
@@ -1048,29 +1046,18 @@ DEFAULT_OPTS = {
     "recon_randomize": True,
     "return_retry_timer": 5,
     "return_retry_timer_max": 10,
-    # NOTE: keeping this here for reference; but we hoppefully won't need it
-    # after the windows phase of the saltless re-work
-    #   "winrepo_dir": os.path.join(hubblestack.syspaths.BASE_FILE_ROOTS_DIR, "win", "repo"),
-    #   "winrepo_dir_ng": os.path.join(hubblestack.syspaths.BASE_FILE_ROOTS_DIR, "win", "repo-ng"),
     "winrepo_source_dir": "salt://win/repo-ng/",
     "winrepo_cachefile": "winrepo.p",
     "winrepo_cache_expire_max": 21600,
     "winrepo_cache_expire_min": 1800,
-    #   "winrepo_remotes": ["https://github.com/saltstack/salt-winrepo.git"],
-    #   "winrepo_remotes_ng": ["https://github.com/saltstack/salt-winrepo-ng.git"],
-    #   "winrepo_branch": "master",
-    #   "winrepo_ssl_verify": True,
-    #   "winrepo_user": "",
-    #   "winrepo_password": "",
-    #   "winrepo_insecure_auth": False,
-    #   "winrepo_privkey": "",
-    #   "winrepo_pubkey": "",
-    #   "winrepo_passphrase": "",
-    #   "winrepo_refspecs": _DFLT_REFSPECS,
     "pidfile": os.path.join(hubblestack.syspaths.PIDFILE_DIR, "hubble.pid"),
     "osquery_dbpath": DEFAULT_OSQUERY_DB_PATH,
-    "osquerylogpath": os.path.join(hubblestack.syspaths.LOGS_DIR, 'hubble_osquery'),
-    "osquerylog_backupdir": os.path.join(hubblestack.syspaths.LOGS_DIR, 'hubble_osquery', 'backuplogs'),
+    "osquerylogpath": os.path.join(
+        hubblestack.syspaths.LOGS_DIR, 'hubble_osquery'
+    ),
+    "osquerylog_backupdir": os.path.join(
+        hubblestack.syspaths.LOGS_DIR, 'hubble_osquery', 'backuplogs'
+    ),
     "range_server": "range:80",
     "reactor_refresh_interval": 60,
     "reactor_worker_threads": 10,
@@ -1094,9 +1081,9 @@ DEFAULT_OPTS = {
     "cache_sreqs": True,
     "cmd_safe": True,
     "sudo_user": "",
-    "http_connect_timeout": 20.0,  # tornado default - 20 seconds
-    "http_request_timeout": 1 * 60 * 60.0,  # 1 hour
-    "http_max_body": 100 * 1024 * 1024 * 1024,  # 100GB
+    "http_connect_timeout": 20.0,
+    "http_request_timeout": 1 * 60 * 60.0,
+    "http_max_body": 100 * 1024 * 1024 * 1024,
     "event_match_type": "startswith",
     "minion_restart_command": [],
     "pub_ret": True,
@@ -1116,7 +1103,12 @@ DEFAULT_OPTS = {
     "minion_sign_messages": False,
     "docker.compare_container_networks": {
         "static": ["Aliases", "Links", "IPAMConfig"],
-        "automatic": ["IPAddress", "Gateway", "GlobalIPv6Address", "IPv6Gateway"],
+        "automatic": [
+            "IPAddress",
+            "Gateway",
+            "GlobalIPv6Address",
+            "IPv6Gateway",
+        ],
     },
     "discovery": False,
     "schedule": {},
@@ -1201,7 +1193,7 @@ def _validate_opts(opts):
             get_types(types, valid_type)
 
             ret = ", ".join(types[:-1])
-            ret += " or " + types[-1]
+            ret += f" or {types[-1]}"
             return ret
 
     errors = []
@@ -1215,13 +1207,12 @@ def _validate_opts(opts):
             if val is None:
                 if VALID_OPTS[key] is None:
                     continue
-                else:
-                    try:
-                        if None in VALID_OPTS[key]:
-                            continue
-                    except TypeError:
-                        # VALID_OPTS[key] is not iterable and not None
-                        pass
+                try:
+                    if None in VALID_OPTS[key]:
+                        continue
+                except TypeError:
+                    # VALID_OPTS[key] is not iterable and not None
+                    pass
 
             if isinstance(val, VALID_OPTS[key]):
                 continue
@@ -1260,9 +1251,7 @@ def _validate_opts(opts):
 
     for error in errors:
         log.warning(error)
-    if errors:
-        return False
-    return True
+    return not errors
 
 
 def _append_domain(opts):
@@ -1303,10 +1292,12 @@ def _read_conf_file(path):
 
         # allow using numeric ids: convert int to string
         if "id" in conf_opts:
-            if not isinstance(conf_opts["id"], str):
-                conf_opts["id"] = str(conf_opts["id"])
-            else:
-                conf_opts["id"] = hubblestack.utils.data.decode(conf_opts["id"])
+            conf_opts["id"] = (
+                hubblestack.utils.data.decode(conf_opts["id"])
+                if isinstance(conf_opts["id"], str)
+                else str(conf_opts["id"])
+            )
+
         return conf_opts
 
 
@@ -1397,13 +1388,12 @@ def include_config(include, orig_path, verbose, exit_on_config_errors=False):
         # Catch situation where user typos path in configuration; also warns
         # for empty include directory (which might be by design)
         glob_matches = glob.glob(path)
-        if not glob_matches:
-            if verbose:
-                log.warning(
-                    'Warning parsing configuration file: "include" path/glob '
-                    "'%s' matches no files",
-                    path,
-                )
+        if not glob_matches and verbose:
+            log.warning(
+                'Warning parsing configuration file: "include" path/glob '
+                "'%s' matches no files",
+                path,
+            )
 
         for fn_ in sorted(glob_matches):
             log.debug("Including configuration from '%s'", fn_)
@@ -1419,8 +1409,7 @@ def include_config(include, orig_path, verbose, exit_on_config_errors=False):
             schedule = opts.get("schedule", {})
             if schedule and "schedule" in configuration:
                 configuration["schedule"].update(schedule)
-            include = opts.get("include", [])
-            if include:
+            if include := opts.get("include", []):
                 opts.update(include_config(include, fn_, verbose))
 
             hubblestack.utils.dictupdate.update(configuration, opts, True, True)
@@ -1453,15 +1442,12 @@ def prepend_root_dir(opts, path_options):
             elif tmp_path_root_dir and not tmp_path_def_root_dir:
                 # Just the root dir matched
                 path = tmp_path_root_dir
-            elif tmp_path_def_root_dir and tmp_path_root_dir:
+            elif tmp_path_def_root_dir:
                 # In this case both the default root dir and the override root
                 # dir matched; this means that either
                 # def_root_dir is a substring of root_dir or vice versa
                 # We must choose the most specific path
-                if def_root_dir in root_dir:
-                    path = tmp_path_root_dir
-                else:
-                    path = tmp_path_def_root_dir
+                path = tmp_path_root_dir if def_root_dir in root_dir else tmp_path_def_root_dir
             elif hubblestack.utils.platform.is_windows() and not os.path.splitdrive(path)[0]:
                 # In windows, os.path.isabs resolves '/' to 'C:\\' or whatever
                 # the root drive is.  This elif prevents the next from being
@@ -1526,10 +1512,10 @@ def get_config(
         salt_config_dir = os.environ.get("SALT_CONFIG_DIR", None)
         if salt_config_dir:
             env_config_file_path = os.path.join(salt_config_dir, "hubble")
-            if salt_config_dir and os.path.isfile(env_config_file_path):
-                # We can get a configuration file using SALT_CONFIG_DIR, let's
-                # update the environment with this information
-                os.environ[env_var] = env_config_file_path
+        if salt_config_dir and os.path.isfile(env_config_file_path):
+            # We can get a configuration file using SALT_CONFIG_DIR, let's
+            # update the environment with this information
+            os.environ[env_var] = env_config_file_path
 
     overrides = load_config(path or DEFAULT_OPTS['conf_file'], env_var)
     default_include = overrides.get("default_include", defaults["default_include"])
@@ -1654,7 +1640,7 @@ def apply_config(overrides=None, defaults=None, cache_minion_id=False, minion_id
 
     for idx, val in enumerate(opts["fileserver_backend"]):
         if val in ("git", "hg", "svn", "minion"):
-            new_val = val + "fs"
+            new_val = f"{val}fs"
             log.debug(
                 "Changed %s to %s in minion opts' fileserver_backend list", val, new_val
             )
@@ -1720,9 +1706,11 @@ def apply_config(overrides=None, defaults=None, cache_minion_id=False, minion_id
     ]
 
     # These can be set to syslog, so, not actual paths on the system
-    for config_key in ("log_file", "key_logfile"):
-        if urlparse(opts.get(config_key, "")).scheme == "":
-            prepend_root_dirs.append(config_key)
+    prepend_root_dirs.extend(
+        config_key
+        for config_key in ("log_file", "key_logfile")
+        if urlparse(opts.get(config_key, "")).scheme == ""
+    )
 
     prepend_root_dir(opts, prepend_root_dirs)
 

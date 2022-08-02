@@ -24,20 +24,13 @@ def __virtual__():
 
 
 def get_docker_details(grains):
-    docker_grains = {}
-
-    docker_details = {}
-    docker_details["installed"] = _is_docker_installed(grains)
-    docker_details["running"] = False
-
+    docker_details = {"installed": _is_docker_installed(grains), "running": False}
     if docker_details["installed"]:
         docker_details["running"] = _is_docker_process_running()
 
     log.debug("docker_details = {0}".format(docker_details))
 
-    docker_grains["docker_details"] = docker_details
-
-    return docker_grains
+    return {"docker_details": docker_details}
 
 
 def _is_docker_installed(grains):
@@ -51,8 +44,7 @@ def _is_docker_installed(grains):
     else:
         log.debug("OS not supported")
         return False
-    query_result = osquery_util(query_sql=osquery_sql)
-    if query_result:
+    if query_result := osquery_util(query_sql=osquery_sql):
         for result in query_result:
             if isinstance(result, dict):
                 package_name = result.get("name")

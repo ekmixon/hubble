@@ -178,9 +178,11 @@ log = logging.getLogger(__name__)
 
 
 def __virtual__():
-    if not hubblestack.utils.platform.is_windows():
-        return False, 'This audit module only runs on windows'
-    return True
+    return (
+        True
+        if hubblestack.utils.platform.is_windows()
+        else (False, 'This audit module only runs on windows')
+    )
 
 
 def validate_params(block_id, block_dict, extra_args=None):
@@ -201,14 +203,13 @@ def validate_params(block_id, block_dict, extra_args=None):
     """
     log.debug('Module: win_auditpol. Start validating params for check-id: {0}'.format(block_id))
     error = {}
-    chained_result = runner_utils.get_chained_param(extra_args)
-    if chained_result:
+    if chained_result := runner_utils.get_chained_param(extra_args):
         name = chained_result.get('name')
     else:
         name = runner_utils.get_param_for_module(block_id, block_dict, 'name')
     # fetch required param
     if not name:
-        error['name'] = 'Mandatory parameter: name not found for id: %s' % block_id
+        error['name'] = f'Mandatory parameter: name not found for id: {block_id}'
 
     if error:
         raise HubbleCheckValidationError(error)
@@ -233,9 +234,7 @@ def execute(block_id, block_dict, extra_args=None):
         tuple of result(value) and status(boolean)
     """
     log.debug('Executing win_auditpol module for id: {0}'.format(block_id))
-    # fetch required param
-    chained_result = runner_utils.get_chained_param(extra_args)
-    if chained_result:
+    if chained_result := runner_utils.get_chained_param(extra_args):
         name = chained_result.get('name')
     else:
         name = runner_utils.get_param_for_module(block_id, block_dict, 'name')
@@ -270,19 +269,18 @@ def get_filtered_params_to_log(block_id, block_dict, extra_args=None):
 
 
 def _auditpol_import():
-    dict_return = {}
     export = _auditpol_export()
     auditpol_csv = csv.DictReader(export)
-    for row in auditpol_csv:
-        if row:
-            dict_return[row['Subcategory']] = row['Inclusion Setting']
-    return dict_return
+    return {
+        row['Subcategory']: row['Inclusion Setting']
+        for row in auditpol_csv
+        if row
+    }
 
 
 def _auditpol_export():
     try:
-        dump = __mods__['cmd.run']('auditpol /get /category:* /r')
-        if dump:
+        if dump := __mods__['cmd.run']('auditpol /get /category:* /r'):
             dump = dump.split('\n')
             return dump
         else:

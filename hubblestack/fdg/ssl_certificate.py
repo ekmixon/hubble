@@ -58,7 +58,7 @@ def _get_certificate_san(x509cert):
     trimmed_san_list = []
     try:
         ext_count = x509cert.get_extension_count()
-        for i in range(0, ext_count):
+        for i in range(ext_count):
             ext = x509cert.get_extension(i)
             if 'subjectAltName' in str(ext.get_short_name()):
                 san = ext.__str__()
@@ -111,7 +111,7 @@ def _parse_cert(cert, host, port):
         not_before = datetime.strptime(x509.get_notBefore().decode('utf-8'), "%Y%m%d%H%M%SZ")
         has_expired = x509.has_expired()
         cert_details['ssl_cert_version'] = str(x509.get_version())
-        cert_details['ssl_has_expired'] = True if has_expired == 1 else False
+        cert_details['ssl_has_expired'] = has_expired == 1
         cert_details['ssl_serial_number'] = str(x509.get_serial_number())
         cert_details['ssl_end_time'] = str(not_after)
         cert_details['ssl_start_time'] = str(not_before)
@@ -126,12 +126,7 @@ def _fill_common_details(host, port, message):
     """
     fill ip, port and message for the connection.
     """
-    cert_details = {}
-    cert_details['ssl_src_port'] = str(port)
-    cert_details['error'] = message
-    cert_details['ssl_src_host'] = str(host)
-
-    return cert_details
+    return {'ssl_src_port': str(port), 'error': message, 'ssl_src_host': str(host)}
 
 def get_cert_details(params='', chained=None, chained_status=None):
     """
@@ -205,14 +200,7 @@ def get_cert_details(params='', chained=None, chained_status=None):
 def _check_input_validity(host, port, ssl_timeout):
     if host == '' or port == -1:
         return False
-    if host.__contains__(" "):
-        return False
-    if ssl_timeout < 0:
-        return False
-    return True
+    return False if host.__contains__(" ") else ssl_timeout >= 0
 
 def _format_components(x509name):
-    items = {}
-    for item in x509name.get_components():
-        items[item[0]] = item[1]
-    return items
+    return {item[0]: item[1] for item in x509name.get_components()}

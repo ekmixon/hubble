@@ -19,9 +19,11 @@ __virtualname__ = 'win_firewall'
 def __virtual__():
     if not hubblestack.utils.platform.is_windows():
         return False, 'This audit module only runs on windows'
-    if not hubblestack.utils.powershell.module_exists('NetSecurity'):
-        return False, 'This audit module requires the NetSecurity module'
-    return True
+    return (
+        True
+        if hubblestack.utils.powershell.module_exists('NetSecurity')
+        else (False, 'This audit module requires the NetSecurity module')
+    )
 
 def apply_labels(__data__, labels):
     """
@@ -50,14 +52,12 @@ def audit(data_list, tags, labels, debug=False, **kwargs):
     with the CIS yaml processed by __virtual__
     """
     __data__ = {}
-    __firewalldata__ = {}
     for profile, data in data_list:
         _merge_yaml(__data__, data, profile)
     __data__ = apply_labels(__data__, labels)
     __tags__ = _get_tags(__data__)
     __is_domain_controller__ = _is_domain_controller()
-    if __tags__:
-        __firewalldata__ = _import_firewall()
+    __firewalldata__ = _import_firewall() if __tags__ else {}
     if debug:
         log.debug('firewall audit __data__:')
         log.debug(__data__)
@@ -100,8 +100,12 @@ def audit(data_list, tags, labels, debug=False, **kwargs):
                         audit_value = __firewalldata__[tag_data['value_type'].title()]
                         audit_value = audit_value[name].lower()
                         tag_data['found_value'] = audit_value
-                        secret = _translate_value_type(audit_value, tag_data['value_type'], match_output, match_type)
-                        if secret:
+                        if secret := _translate_value_type(
+                            audit_value,
+                            tag_data['value_type'],
+                            match_output,
+                            match_type,
+                        ):
                             ret['Success'].append(tag_data)
                         else:
                             tag_data['failure_reason'] = "Value of property '{0}({1})' is " \
@@ -168,9 +172,7 @@ def _get_tags(data):
                 # secedit:whitelist:PasswordComplexity:data:Windows 2012
                 if isinstance(tags, dict):
                     # malformed yaml, convert to list of dicts
-                    tmp = []
-                    for name, tag in tags.items():
-                        tmp.append({name: tag})
+                    tmp = [{name: tag} for name, tag in tags.items()]
                     tags = tmp
                 for item in tags:
                     for name, tag in item.items():
@@ -185,7 +187,7 @@ def _get_tags(data):
                                           'tag': tag,
                                           'module': 'win_firewall',
                                           'type': toplist}
-                        formatted_data.update(tag_data)
+                        formatted_data |= tag_data
                         formatted_data.update(audit_data)
                         formatted_data.pop('data')
                         ret[tag].append(formatted_data)
@@ -196,11 +198,8 @@ def _export_firewall():
     dump = []
     try:
         temp = __mods__['cmd.run']('mode con:cols=1000 lines=1000; Get-NetFirewallProfile -PolicyStore ActiveStore', shell='powershell', python_shell=True)
-        temp = temp.split('\r\n\r\n')
-        if temp:
-            for item in temp:
-                if item != '':
-                    dump.append(item)
+        if temp := temp.split('\r\n\r\n'):
+            dump.extend(item for item in temp if item != '')
             return dump
         else:
             log.error('Nothing was returned from the auditpol command.')
@@ -225,24 +224,21 @@ def _import_firewall():
 
 
 def _translate_value_type(current, value, evaluator, match):
-    if value in ('public', 'private', 'domain'):
-        if match == '=':
-            if current == evaluator:
-                return True
-        if match == '>':
-            if int(current) > int(evaluator):
-                return True
-        if match == '<':
-            if int(current) < int(evaluator):
-                return True
-    return False
+    return value in ('public', 'private', 'domain') and (
+        match == '<'
+        and int(current) < int(evaluator)
+        or match != '<'
+        and match == '='
+        and current == evaluator
+        or match != '<'
+        and match != '='
+        and match == '>'
+        and int(current) > int(evaluator)
+    )
 
 
 def _is_domain_controller():
     ret = __mods__['reg.read_value'](hive="HKLM",
                                      key=r"SYSTEM\CurrentControlSet\Control\ProductOptions",
                                      vname="ProductType")
-    if ret['vdata'] == "LanmanNT":
-        return True
-    else:
-        return False
+    return ret['vdata'] == "LanmanNT"

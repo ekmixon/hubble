@@ -30,7 +30,7 @@ http_event_collector_debug = False
 # are hashed into an md5 string that identifies the URL set
 # these maximums are per URL set, not for the entire disk cache
 max_diskqueue_size  = 10 * (1024 ** 2)
-isFipsEnabled = True if 'usedforsecurity' in getfullargspec(hashlib.new).kwonlyargs else False
+isFipsEnabled = 'usedforsecurity' in getfullargspec(hashlib.new).kwonlyargs
 
 
 def count_input(payload):
@@ -222,11 +222,7 @@ class HEC(object):
             self.proxy = None
 
         # Set host to specified value or default to localhostname if no value provided
-        if host:
-            self.host = host
-        else:
-            self.host = socket.gethostname()
-
+        self.host = host or socket.gethostname()
         Payload.host = self.host
 
         # Build and set server_uri for http event collector
@@ -265,9 +261,9 @@ class HEC(object):
         }
 
         if http_event_collector_ssl_verify:
-            pm_kw.update({'cert_reqs': 'CERT_REQUIRED', 'ca_certs': certifi.where()})
+            pm_kw |= {'cert_reqs': 'CERT_REQUIRED', 'ca_certs': certifi.where()}
         else:
-            pm_kw.update({'cert_reqs': 'CERT_NONE'})
+            pm_kw['cert_reqs'] = 'CERT_NONE'
             urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
         if self.proxy:
@@ -277,10 +273,7 @@ class HEC(object):
             self.pool_manager = urllib3.PoolManager(**pm_kw)
 
         if disk_queue:
-            if isFipsEnabled:
-                md5 = hashlib.md5(usedforsecurity=False)
-            else:
-                md5 = hashlib.md5()
+            md5 = hashlib.md5(usedforsecurity=False) if isFipsEnabled else hashlib.md5()
             uril = sorted([ x.uri for x in self.server_uri ])
             for u in uril:
                 md5.update(encode_something_to_bytes(u))
@@ -312,7 +305,7 @@ class HEC(object):
         log.error('Sending to Splunk failed, queueing %d octets to disk', len(p))
         try:
             if meta_data is None:
-                meta_data = dict()
+                meta_data = {}
             if 'queued_to_disk' not in meta_data:
                 meta_data['queued_to_disk'] = 0
             meta_data['queued_to_disk'] += 1
@@ -378,7 +371,7 @@ class HEC(object):
         # than Splunk)
         meta_data = kwargs.get('meta_data')
         if not isinstance(meta_data, dict):
-            meta_data = dict()
+            meta_data = {}
         for i in ('send_attempts', 'bad_request'):
             if i not in meta_data:
                 meta_data[i] = 0

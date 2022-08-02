@@ -216,23 +216,24 @@ def validate_params(block_id, block_dict, extra_args=None):
     error = {}
     filepath = None
 
-    chaining_file_mode = runner_utils.get_param_for_module(block_id, block_dict, 'chain_filepath', False)
-    if chaining_file_mode:
+    if chaining_file_mode := runner_utils.get_param_for_module(
+        block_id, block_dict, 'chain_filepath', False
+    ):
         # in chain_filepath mode, filepath from chaining is mandatory
         filepath = runner_utils.get_chained_param(extra_args)
         if not filepath:
-            error['path'] = 'Mandatory parameter: path not found for id: %s' % (block_id)
+            error['path'] = f'Mandatory parameter: path not found for id: {block_id}'
     else:
         # fetch required param
         file_content = runner_utils.get_chained_param(extra_args)
         if not file_content:
             filepath = runner_utils.get_param_for_module(block_id, block_dict, 'path')
         if not file_content and not filepath:
-            error['path'] = 'Mandatory parameter: path not found for id: %s' % (block_id)
+            error['path'] = f'Mandatory parameter: path not found for id: {block_id}'
 
     pattern_val = runner_utils.get_param_for_module(block_id, block_dict, 'pattern')
     if not pattern_val:
-        error['pattern'] = 'Mandatory parameter: pattern not found for id: %s' % (block_id)
+        error['pattern'] = f'Mandatory parameter: pattern not found for id: {block_id}'
 
     if error:
         raise HubbleCheckValidationError(error)
@@ -276,8 +277,9 @@ def execute(block_id, block_dict, extra_args=None):
     # check if chained content is available
     format_chained = runner_utils.get_param_for_module(block_id, block_dict, 'format_chained', True)
     starting_string = runner_utils.get_param_for_module(block_id, block_dict, 'starting_string', False)
-    chaining_file_mode = runner_utils.get_param_for_module(block_id, block_dict, 'chain_filepath', False)
-    if chaining_file_mode:
+    if chaining_file_mode := runner_utils.get_param_for_module(
+        block_id, block_dict, 'chain_filepath', False
+    ):
         # in chain_filepath mode, filepath from chaining is mandatory
         chained_filepath = runner_utils.get_chained_param(extra_args)
         filepath = runner_utils.get_param_for_module(block_id, block_dict, 'path')
@@ -374,11 +376,7 @@ def _grep(path,
     if path:
         path = os.path.expanduser(path)
 
-    if args:
-        options = ' '.join(args)
-    else:
-        options = ''
-
+    options = ' '.join(args) if args else ''
     # prepare the command
     cmd = None
     if path:
@@ -388,7 +386,7 @@ def _grep(path,
         )
     else:
         # in stdin mode
-        options = [] if options == '' else [options]
+        options = [options] if options else []
         cmd = ['grep'] + options + [pattern]
 
     try:

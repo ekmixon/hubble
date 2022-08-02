@@ -39,31 +39,26 @@ def config():
     if 'conf_file' not in __opts__:
         return {}
     if os.path.isdir(__opts__['conf_file']):
-        if hubblestack.utils.platform.is_proxy():
-            gfn = os.path.join(
-                    __opts__['conf_file'],
-                    'proxy.d',
-                    __opts__['id'],
-                    'grains'
-                    )
-        else:
-            gfn = os.path.join(
-                    __opts__['conf_file'],
-                    'grains'
-                    )
+        gfn = (
+            os.path.join(
+                __opts__['conf_file'], 'proxy.d', __opts__['id'], 'grains'
+            )
+            if hubblestack.utils.platform.is_proxy()
+            else os.path.join(__opts__['conf_file'], 'grains')
+        )
+
+    elif hubblestack.utils.platform.is_proxy():
+        gfn = os.path.join(
+                os.path.dirname(__opts__['conf_file']),
+                'proxy.d',
+                __opts__['id'],
+                'grains'
+                )
     else:
-        if hubblestack.utils.platform.is_proxy():
-            gfn = os.path.join(
-                    os.path.dirname(__opts__['conf_file']),
-                    'proxy.d',
-                    __opts__['id'],
-                    'grains'
-                    )
-        else:
-            gfn = os.path.join(
-                    os.path.dirname(__opts__['conf_file']),
-                    'grains'
-                    )
+        gfn = os.path.join(
+                os.path.dirname(__opts__['conf_file']),
+                'grains'
+                )
     if os.path.isfile(gfn):
         log.debug('Loading static grains from %s', gfn)
         with hubblestack.utils.files.fopen(gfn, 'rb') as fp_:

@@ -298,29 +298,26 @@ def validate_params(block_id, block_dict, extra_args=None):
 
     function_param = runner_utils.get_param_for_module(block_id, block_dict, 'function')
     if not function_param:
-        error['function'] = 'Mandatory parameter: function not found for id: %s' % (block_id)
+        error[
+            'function'
+        ] = f'Mandatory parameter: function not found for id: {block_id}'
+
     elif function_param not in ['filter_dict', 'filter_seq', 'get_index', 'get_key', 'join',
                                 'dict_to_list', 'dict_convert_none', 'print_string',
                                 'dict_remove_none', 'nop', 'encode_base64']:
         error['function'] = 'Unsupported function in util: {0}'.format(function_param)
-    else:
-        if function_param == 'filter_dict':
-            if not runner_utils.get_param_for_module(block_id, block_dict, 'filter_rules'):
-                error['filter_rules'] = 'filter_rules required for function: filter_dict'
-        elif function_param == 'filter_seq':
-            if not runner_utils.get_param_for_module(block_id, block_dict, 'filter_rules'):
-                error['filter_rules'] = 'filter_rules required for function: filter_seq'
-        elif function_param == 'get_key':
-            if not runner_utils.get_param_for_module(block_id, block_dict, 'key'):
-                error['key'] = 'key is required for function: get_key'
-        elif function_param == 'join':
-            if not runner_utils.get_param_for_module(block_id, block_dict, 'words'):
-                error['words'] = 'words are required for function: join'
-        elif function_param == ['dict_convert_none', 'print_string', 'dict_to_list',
-            'get_index', 'dict_remove_none', 'nop', 'encode_base64']:
-            # no mandatory key, mentioned here just for clarity
-            pass
-
+    elif function_param == 'filter_dict':
+        if not runner_utils.get_param_for_module(block_id, block_dict, 'filter_rules'):
+            error['filter_rules'] = 'filter_rules required for function: filter_dict'
+    elif function_param == 'filter_seq':
+        if not runner_utils.get_param_for_module(block_id, block_dict, 'filter_rules'):
+            error['filter_rules'] = 'filter_rules required for function: filter_seq'
+    elif function_param == 'get_key':
+        if not runner_utils.get_param_for_module(block_id, block_dict, 'key'):
+            error['key'] = 'key is required for function: get_key'
+    elif function_param == 'join':
+        if not runner_utils.get_param_for_module(block_id, block_dict, 'words'):
+            error['words'] = 'words are required for function: join'
     if error:
         raise HubbleCheckValidationError(error)
 
@@ -636,15 +633,18 @@ def _get_key(block_id, block_dict, extra_args):
     except KeyError:
         log.error("Key not found: %s", key, exc_info=True)
         return runner_utils.prepare_negative_result_for_module(block_id, 'key_not_found')
-        return False, None
     except TypeError:
         log.error("Arguments should be of type dict.", exc_info=True)
         return runner_utils.prepare_negative_result_for_module(block_id, 'invalid_format')
     status = bool(ret)
 
-    if not status:
-        return runner_utils.prepare_negative_result_for_module(block_id, 'unknown_error')
-    return runner_utils.prepare_positive_result_for_module(block_id, ret)
+    return (
+        runner_utils.prepare_positive_result_for_module(block_id, ret)
+        if status
+        else runner_utils.prepare_negative_result_for_module(
+            block_id, 'unknown_error'
+        )
+    )
 
 def _join(block_id, block_dict, extra_args):
     """
@@ -693,10 +693,13 @@ def _join(block_id, block_dict, extra_args):
         return runner_utils.prepare_negative_result_for_module(block_id, 'invalid_format')
 
     status = bool(ret)
-    if not status:
-        return runner_utils.prepare_negative_result_for_module(block_id, 'unknown_error')
-
-    return runner_utils.prepare_positive_result_for_module(block_id, ret)
+    return (
+        runner_utils.prepare_positive_result_for_module(block_id, ret)
+        if status
+        else runner_utils.prepare_negative_result_for_module(
+            block_id, 'unknown_error'
+        )
+    )
 
 def _sort(block_id, block_dict, extra_args):
     """
@@ -747,9 +750,13 @@ def _sort(block_id, block_dict, extra_args):
     ret = _sort_helper(chained, desc, lexico)
     status = bool(ret)
 
-    if not status:
-        return runner_utils.prepare_negative_result_for_module(block_id, 'unknown_error')
-    return runner_utils.prepare_positive_result_for_module(block_id, ret)
+    return (
+        runner_utils.prepare_positive_result_for_module(block_id, ret)
+        if status
+        else runner_utils.prepare_negative_result_for_module(
+            block_id, 'unknown_error'
+        )
+    )
 
 
 def _sort_helper(seq,
@@ -767,9 +774,7 @@ def _sort_helper(seq,
     lexico
         Set to True if the sorting thould be in lexicographical order.
     """
-    key = None
-    if lexico:
-        key = str.lower
+    key = str.lower if lexico else None
     try:
         ret = sorted(seq, reverse=desc, key=key)
     except TypeError:
@@ -824,9 +829,13 @@ def _split(block_id, block_dict, extra_args):
     ret = _split_helper(phrase, sep, regex)
     status = bool(ret) and len(ret) > 1
 
-    if not status:
-        return runner_utils.prepare_negative_result_for_module(block_id, 'unknown_error')
-    return runner_utils.prepare_positive_result_for_module(block_id, ret)
+    return (
+        runner_utils.prepare_positive_result_for_module(block_id, ret)
+        if status
+        else runner_utils.prepare_negative_result_for_module(
+            block_id, 'unknown_error'
+        )
+    )
 
 def _split_helper(phrase,
            sep,
@@ -845,10 +854,7 @@ def _split_helper(phrase,
         Set to True if ``sep`` should be treated as a regex instead of a delimiter.
     """
     try:
-        if regex:
-            ret = re.split(sep, phrase)
-        else:
-            ret = phrase.split(sep)
+        ret = re.split(sep, phrase) if regex else phrase.split(sep)
     except (AttributeError, TypeError):
         log.error("Invalid argument type.", exc_info=True)
         return None
@@ -889,12 +895,16 @@ def _dict_to_list(block_id, block_dict, extra_args):
         except (AttributeError, ValueError, TypeError):
             log.error("Invalid arguments type.", exc_info=True)
             return runner_utils.prepare_negative_result_for_module(block_id, 'invalid_format')
-    ret = [(key, value) for key, value in chained.items()]
+    ret = list(chained.items())
     status = bool(ret)
 
-    if not status:
-        return runner_utils.prepare_negative_result_for_module(block_id, 'unknown_error')
-    return runner_utils.prepare_positive_result_for_module(block_id, ret)
+    return (
+        runner_utils.prepare_positive_result_for_module(block_id, ret)
+        if status
+        else runner_utils.prepare_negative_result_for_module(
+            block_id, 'unknown_error'
+        )
+    )
 
 
 def _dict_convert_none(block_id, block_dict, extra_args):
@@ -944,9 +954,13 @@ def _dict_convert_none(block_id, block_dict, extra_args):
         return runner_utils.prepare_negative_result_for_module(block_id, 'invalid_error')
     status = bool(ret)
 
-    if not status:
-        return runner_utils.prepare_negative_result_for_module(block_id, 'unknown_error')
-    return runner_utils.prepare_positive_result_for_module(block_id, ret)
+    return (
+        runner_utils.prepare_positive_result_for_module(block_id, ret)
+        if status
+        else runner_utils.prepare_negative_result_for_module(
+            block_id, 'unknown_error'
+        )
+    )
 
 
 def _dict_convert_none_helper(dictionary):
@@ -1035,9 +1049,15 @@ def _print_string(block_id, block_dict, extra_args):
         log.error('Invalid arguments - starting_string should be a string')
         return runner_utils.prepare_negative_result_for_module(block_id, 'invalid_format')
 
-    if not bool(starting_string):
-        return runner_utils.prepare_negative_result_for_module(block_id, 'unknown_error')
-    return runner_utils.prepare_positive_result_for_module(block_id, starting_string)
+    return (
+        runner_utils.prepare_positive_result_for_module(
+            block_id, starting_string
+        )
+        if bool(starting_string)
+        else runner_utils.prepare_negative_result_for_module(
+            block_id, 'unknown_error'
+        )
+    )
 
 def _dict_remove_none(block_id, block_dict, extra_args):
     """
@@ -1086,9 +1106,13 @@ def _dict_remove_none(block_id, block_dict, extra_args):
         return runner_utils.prepare_negative_result_for_module(block_id, 'invalid_format')
 
     status = bool(ret)
-    if not status:
-        return runner_utils.prepare_negative_result_for_module(block_id, 'unknown_error')
-    return runner_utils.prepare_positive_result_for_module(block_id, ret)
+    return (
+        runner_utils.prepare_positive_result_for_module(block_id, ret)
+        if status
+        else runner_utils.prepare_negative_result_for_module(
+            block_id, 'unknown_error'
+        )
+    )
 
 
 def _sterilize_dict(dictionary):
@@ -1179,9 +1203,13 @@ def _encode_base64(block_id, block_dict, extra_args):
 
     status, ret = utils_encode_base64(starting_string, format_chained=format_chained,
                                chained=chained)
-    if not status:
-        return runner_utils.prepare_negative_result_for_module(block_id, 'unknown_error')
-    return runner_utils.prepare_positive_result_for_module(block_id, ret)
+    return (
+        runner_utils.prepare_positive_result_for_module(block_id, ret)
+        if status
+        else runner_utils.prepare_negative_result_for_module(
+            block_id, 'unknown_error'
+        )
+    )
 
 def get_filtered_params_to_log(block_id, block_dict, extra_args=None):
     """

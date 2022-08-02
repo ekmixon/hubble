@@ -97,23 +97,24 @@ def audit(data_list, tags, labels, debug=False, **kwargs):
 
                 enabled = __mods__['service.enabled'](name)
                 # Blacklisted service (must not be running or not found)
-                if audittype == 'blacklist':
-                    if not enabled:
-                        ret['Success'].append(tag_data)
-                    else:
-                        tag_data['failure_reason'] = "Found blacklisted service '{0}'" \
-                                                     " enabled on the system" \
-                                                     .format(name)
-                        ret['Failure'].append(tag_data)
-                # Whitelisted pattern (must be found and running)
+                if (
+                    audittype == 'blacklist'
+                    and not enabled
+                    or audittype != 'blacklist'
+                    and audittype == 'whitelist'
+                    and enabled
+                ):
+                    ret['Success'].append(tag_data)
+                elif audittype == 'blacklist':
+                    tag_data['failure_reason'] = "Found blacklisted service '{0}'" \
+                                                 " enabled on the system" \
+                                                 .format(name)
+                    ret['Failure'].append(tag_data)
                 elif audittype == 'whitelist':
-                    if enabled:
-                        ret['Success'].append(tag_data)
-                    else:
-                        tag_data['failure_reason'] = "Could not find requisite service" \
-                                                     " '{0}'running on the system" \
-                                                     .format(name)
-                        ret['Failure'].append(tag_data)
+                    tag_data['failure_reason'] = "Could not find requisite service" \
+                                                 " '{0}'running on the system" \
+                                                 .format(name)
+                    ret['Failure'].append(tag_data)
 
     return ret
 
@@ -163,9 +164,7 @@ def _get_tags(data):
                 # systemctl:blacklist:0:telnet:data:Debian-8
                 if isinstance(tags, dict):
                     # malformed yaml, convert to list of dicts
-                    tmp = []
-                    for name, tag in tags.items():
-                        tmp.append({name: tag})
+                    tmp = [{name: tag} for name, tag in tags.items()]
                     tags = tmp
                 for item in tags:
                     for name, tag in item.items():
@@ -180,7 +179,7 @@ def _get_tags(data):
                                           'tag': tag,
                                           'module': 'systemctl',
                                           'type': toplist}
-                        formatted_data.update(tag_data)
+                        formatted_data |= tag_data
                         formatted_data.update(audit_data)
                         formatted_data.pop('data')
                         ret[tag].append(formatted_data)

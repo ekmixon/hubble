@@ -18,9 +18,11 @@ __virtualname__ = 'win_pkg'
 
 
 def __virtual__():
-    if not hubblestack.utils.platform.is_windows():
-        return False, 'This audit module only runs on windows'
-    return True
+    return (
+        True
+        if hubblestack.utils.platform.is_windows()
+        else (False, 'This audit module only runs on windows')
+    )
 
 def apply_labels(__data__, labels):
     """
@@ -96,8 +98,9 @@ def audit(data_list, tags, labels, debug=False, **kwargs):
                     if name in __pkgdata__:
                         audit_value = __pkgdata__[name]
                         tag_data['found_value'] = audit_value
-                        secret = _translate_value_type(audit_value, tag_data['value_type'], match_output)
-                        if secret:
+                        if secret := _translate_value_type(
+                            audit_value, tag_data['value_type'], match_output
+                        ):
                             ret['Success'].append(tag_data)
                         else:
                             tag_data['failure_reason'] = "Version '{0}({1}) of the requisite" \
@@ -163,9 +166,7 @@ def _get_tags(data):
                 # secedit:whitelist:PasswordComplexity:data:Windows 2012
                 if isinstance(tags, dict):
                     # malformed yaml, convert to list of dicts
-                    tmp = []
-                    for name, tag in tags.items():
-                        tmp.append({name: tag})
+                    tmp = [{name: tag} for name, tag in tags.items()]
                     tags = tmp
                 for item in tags:
                     for name, tag in item.items():
@@ -180,7 +181,7 @@ def _get_tags(data):
                                           'tag': tag,
                                           'module': 'win_auditpol',
                                           'type': toplist}
-                        formatted_data.update(tag_data)
+                        formatted_data |= tag_data
                         formatted_data.update(audit_data)
                         formatted_data.pop('data')
                         ret[tag].append(formatted_data)
@@ -192,16 +193,13 @@ def _translate_value_type(current, value, evaluator):
         return True
     if 'less' in value.lower() and LooseVersion(current) <= LooseVersion(evaluator):
         return True
-    if 'more' in value.lower() and LooseVersion(current) >= LooseVersion(evaluator):
-        return True
-    return False
+    return 'more' in value.lower() and LooseVersion(current) >= LooseVersion(
+        evaluator
+    )
 
 
 def _is_domain_controller():
     ret = __mods__['reg.read_value'](hive="HKLM",
                                      key=r"SYSTEM\CurrentControlSet\Control\ProductOptions",
                                      vname="ProductType")
-    if ret['vdata'] == "LanmanNT":
-        return True
-    else:
-        return False
+    return ret['vdata'] == "LanmanNT"

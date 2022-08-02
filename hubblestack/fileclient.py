@@ -65,10 +65,8 @@ def decode_dict_keys_to_str(src):
     output = {}
     for key, val in iter(src.items()):
         if isinstance(key, bytes):
-            try:
+            with contextlib.suppress(UnicodeError):
                 key = key.decode()
-            except UnicodeError:
-                pass
         output[key] = val
     return output
 
@@ -108,11 +106,7 @@ class Client(object):
         '''
         Helper util to return a list of files in a directory
         '''
-        if os.path.isdir(dest):
-            destdir = dest
-        else:
-            destdir = os.path.dirname(dest)
-
+        destdir = dest if os.path.isdir(dest) else os.path.dirname(dest)
         filelist = set()
 
         for root, dirs, files in hubblestack.utils.path.os_walk(destdir, followlinks=True):
@@ -187,24 +181,20 @@ class Client(object):
         Download a list of files stored on the master and put them in the
         minion file cache
         '''
-        ret = []
         if isinstance(paths, str):
             paths = paths.split(',')
-        for path in paths:
-            ret.append(self.cache_file(path, saltenv, cachedir=cachedir))
-        return ret
+        return [self.cache_file(path, saltenv, cachedir=cachedir) for path in paths]
 
     def cache_master(self, saltenv='base', cachedir=None):
         '''
         Download and cache all files on a master in a specified environment
         '''
-        ret = []
-        for path in self.file_list(saltenv):
-            ret.append(
-                self.cache_file(
-                    hubblestack.utils.url.create(path), saltenv, cachedir=cachedir)
+        return [
+            self.cache_file(
+                hubblestack.utils.url.create(path), saltenv, cachedir=cachedir
             )
-        return ret
+            for path in self.file_list(saltenv)
+        ]
 
     def cache_dir(self, path, saltenv='base', include_empty=False,
                   include_pat=None, exclude_pat=None, cachedir=None,
@@ -219,7 +209,7 @@ class Client(object):
         # '/' explicitly because the master (that's generating the
         # list of files) only runs on POSIX
         if not hubblestack.utils.platform.is_windows() and not path.endswith('/'):
-            path = path + '/'
+            path = f'{path}/'
 
         log.info(
             'Caching directory \'%s\' for environment \'%s\'', path, saltenv
@@ -228,13 +218,17 @@ class Client(object):
         # the target directory and caching them
         for fn_ in self.file_list(saltenv):
             fn_ = hubblestack.utils.data.decode(fn_)
-            if fn_.strip() and fn_.startswith(path):
-                if hubblestack.utils.stringutils.check_include_exclude(
-                        fn_, include_pat, exclude_pat):
-                    fn_ = self.cache_file(
-                        hubblestack.utils.url.create(fn_), saltenv, cachedir=cachedir)
-                    if fn_:
-                        ret.append(fn_)
+            if (
+                fn_.strip()
+                and fn_.startswith(path)
+                and hubblestack.utils.stringutils.check_include_exclude(
+                    fn_, include_pat, exclude_pat
+                )
+            ):
+                fn_ = self.cache_file(
+                    hubblestack.utils.url.create(fn_), saltenv, cachedir=cachedir)
+                if fn_:
+                    ret.append(fn_)
 
         if include_empty:
             # Break up the path into a list containing the bottom-level
@@ -328,7 +322,7 @@ class Client(object):
             if senv:
                 saltenv = senv
 
-        escaped = True if hubblestack.utils.url.is_escaped(path) else False
+        escaped = bool(hubblestack.utils.url.is_escaped(path))
 
         # also strip escape character '|'
         localsfilesdest = os.path.join(
@@ -341,8 +335,8 @@ class Client(object):
             return hubblestack.utils.url.escape(filesdest) if escaped else filesdest
         elif os.path.exists(localsfilesdest):
             return hubblestack.utils.url.escape(localsfilesdest) \
-                if escaped \
-                else localsfilesdest
+                    if escaped \
+                    else localsfilesdest
         elif os.path.exists(extrndest):
             return extrndest
 
@@ -372,11 +366,10 @@ class Client(object):
         '''
         if '.' in sls:
             sls = sls.replace('.', '/')
-        sls_url = hubblestack.utils.url.create(sls + '.sls')
-        init_url = hubblestack.utils.url.create(sls + '/init.sls')
+        sls_url = hubblestack.utils.url.create(f'{sls}.sls')
+        init_url = hubblestack.utils.url.create(f'{sls}/init.sls')
         for path in [sls_url, init_url]:
-            dest = self.cache_file(path, saltenv, cachedir=cachedir)
-            if dest:
+            if dest := self.cache_file(path, saltenv, cachedir=cachedir):
                 return {'source': path, 'dest': dest}
         return {}
 
@@ -391,13 +384,7 @@ class Client(object):
         # Break up the path into a list containing the bottom-level directory
         # (the one being recursively copied) and the directories preceding it
         separated = path.rsplit('/', 1)
-        if len(separated) != 2:
-            # No slashes in path. (This means all files in saltenv will be
-            # copied)
-            prefix = ''
-        else:
-            prefix = separated[0]
-
+        prefix = '' if len(separated) != 2 else separated[0]
         # Copy files from master
         for fn_ in self.file_list(saltenv, prefix=path):
             # Prevent files in "salt://foobar/" (or salt://foo.sh) from
@@ -418,7 +405,7 @@ class Client(object):
                )
             )
         # Replicate empty dirs from master
-        try:
+        with contextlib.suppress(TypeError):
             for fn_ in self.file_list_emptydirs(saltenv, prefix=path):
                 # Prevent an empty dir "salt://foobar/" from matching a path of
                 # "salt://foo"
@@ -434,8 +421,6 @@ class Client(object):
                 if not os.path.isdir(minion_mkdir):
                     os.makedirs(minion_mkdir)
                 ret.append(minion_mkdir)
-        except TypeError:
-            pass
         ret.sort()
         return ret
 

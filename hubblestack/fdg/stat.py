@@ -99,9 +99,8 @@ def get_stats(params='', chained=None, chained_status=None):
 
         filepath = params.get('filepath')
 
-    salt_ret = {}
     log.info("checking stats of %s", filepath)
-    salt_ret['filepath'] = filepath
+    salt_ret = {'filepath': filepath}
     if os.path.exists(filepath):
         salt_ret['file_stats'] = __mods__['file.stats'](filepath)
     else:
@@ -148,13 +147,25 @@ def match_stats(params='', chained=None, chained_status=None):
         ret = {"Success": success_msg}
         return True, ret
 
-    expected = {}
-    for attribute in ['mode', 'user', 'uid', 'group', 'gid', 'allow_more_strict', 'match_on_file_missing']:
-        if attribute in params.keys():
-            expected[attribute] = params[attribute]
+    expected = {
+        attribute: params[attribute]
+        for attribute in [
+            'mode',
+            'user',
+            'uid',
+            'group',
+            'gid',
+            'allow_more_strict',
+            'match_on_file_missing',
+        ]
+        if attribute in params.keys()
+    }
 
-    if 'match_on_file_missing' in expected.keys() and expected['match_on_file_missing'] \
-            and file_stats.get("file_not_found"):
+    if (
+        'match_on_file_missing' in expected
+        and expected['match_on_file_missing']
+        and file_stats.get("file_not_found")
+    ):
         ret = {"Success": "file not found, passing test case since 'match_on_file_missing' is set to True", "expected": expected, "file": filepath}
         log.info("FDG stat's match_stats function is returning status : True, value : %s", ret)
         return True, ret
@@ -173,8 +184,8 @@ def match_stats(params='', chained=None, chained_status=None):
 
     passed = True
     reason_dict = {}
-    for attribute in expected.keys():
-        if attribute == 'allow_more_strict' or attribute == 'match_on_file_missing':
+    for attribute in expected:
+        if attribute in ['allow_more_strict', 'match_on_file_missing']:
             continue
         file_attribute_value = file_stats[attribute]
 

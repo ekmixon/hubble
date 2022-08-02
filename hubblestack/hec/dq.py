@@ -44,10 +44,8 @@ class NoQueue(object):
     cn = 0
     def put(self, *a, **kw):
         log.debug('no-queue.put() dumping event')
-        pass
     def getz(self, *a, **kw):
         log.debug('no-queue.put() nothing to dequeue')
-        pass
     def __bool__(self):
         return False
     __nonzero__ = __bool__ # stupid python2
@@ -82,7 +80,7 @@ class DiskQueue(OKTypesMixin):
         return _bz2(dat)
 
     def unlink_(self, fname):
-        names = (fname, fname + '.meta')
+        names = fname, f'{fname}.meta'
         for name in names:
             if os.path.isfile(name):
                 os.unlink(name)
@@ -114,13 +112,11 @@ class DiskQueue(OKTypesMixin):
             shutil.rmtree(self.directory)
 
     def _fanout(self, name):
-        return (name[0:4], name[4:])
+        return name[:4], name[4:]
 
     def accept(self, item):
         """ test to see whether the given item would fit in the queue under the queue's size restraints """
-        if len(item) + self.sz > self.size:
-            return False
-        return True
+        return len(item) + self.sz <= self.size
 
     def put(self, item, **meta):
         """ Put an item in the queue at the end (FIFO order)
@@ -138,7 +134,7 @@ class DiskQueue(OKTypesMixin):
             log.debug('writing item to disk cache')
             fh.write(bstr)
         if meta:
-            with open(f + '.meta', 'w') as fh:
+            with open(f'{f}.meta', 'w') as fh:
                 json.dump(meta, fh)
         self.cn += 1
         self.sz += len(bstr)
@@ -147,7 +143,7 @@ class DiskQueue(OKTypesMixin):
 
     def read_meta(self, fname):
         try:
-            with open(fname + '.meta', 'r') as fh:
+            with open(f'{fname}.meta', 'r') as fh:
                 return json.load(fh)
         except ValueError:
             # can't quite read the json
@@ -155,7 +151,7 @@ class DiskQueue(OKTypesMixin):
         except IOError:
             # no such file
             pass
-        return dict()
+        return {}
 
     def peek(self):
         """ look at the next item in the queue, but don't actually remove it from the queue
@@ -206,7 +202,7 @@ class DiskQueue(OKTypesMixin):
         # Is it "dangerous" to unlink files during the os.walk (via generator)?
         # .oO( probably doesn't matter )
         ret = b''
-        meta_data = dict()
+        meta_data = {}
         for fname in self.files:
             with open(fname, 'rb') as fh:
                 partial_data = self.decompress(fh.read())
@@ -218,7 +214,7 @@ class DiskQueue(OKTypesMixin):
             _md = self.read_meta(fname)
             for k in _md:
                 if k not in meta_data:
-                    meta_data[k] = list()
+                    meta_data[k] = []
                 meta_data[k].append( _md[k] )
             self.unlink_(fname)
         self._count()

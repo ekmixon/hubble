@@ -188,9 +188,7 @@ def _get_tags(data):
                 # service:blacklist:0:telnet:data:Debian-8
                 if isinstance(tags, dict):
                     # malformed yaml, convert to list of dicts
-                    tmp = []
-                    for name, tag in tags.items():
-                        tmp.append({name: tag})
+                    tmp = [{name: tag} for name, tag in tags.items()]
                     tags = tmp
                 for item in tags:
                     for name, tag in item.items():
@@ -200,7 +198,7 @@ def _get_tags(data):
                                           'tag': tag,
                                           'module': 'service',
                                           'type': toplist}
-                        formatted_data.update(audit_data)
+                        formatted_data |= audit_data
                         formatted_data.pop('data')
                         ret[tag].append(formatted_data)
     return ret

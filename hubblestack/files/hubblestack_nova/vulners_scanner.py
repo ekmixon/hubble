@@ -112,10 +112,10 @@ def _vulners_query(packages=None, os=None, version=None, api_key=None):
     if not packages:
         error['data']['error'] = 'Missing the list of packages.'
         return error
-    if not os and not version:
-        error['data']['error'] = 'Missing the operating system name and version.'
-        return error
     if not os:
+        if not version:
+            error['data']['error'] = 'Missing the operating system name and version.'
+            return error
         error['data']['error'] = 'Missing the operating system name.'
         return error
     if not version:
@@ -134,10 +134,15 @@ def _process_vulners(vulners):
     """
 
     packages = vulners.get('packages')
-    if not packages:
-        return []
-
-    return [{'tag': 'Vulnerable package: {0}'.format(pkg),
-             'vulnerabilities': packages[pkg],
-             'description': ', '.join(packages[pkg].keys())}
-            for pkg in packages]
+    return (
+        [
+            {
+                'tag': 'Vulnerable package: {0}'.format(pkg),
+                'vulnerabilities': packages[pkg],
+                'description': ', '.join(packages[pkg].keys()),
+            }
+            for pkg in packages
+        ]
+        if packages
+        else []
+    )

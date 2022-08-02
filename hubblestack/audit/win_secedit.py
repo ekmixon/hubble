@@ -216,9 +216,11 @@ log = logging.getLogger(__name__)
 
 
 def __virtual__():
-    if not hubblestack.utils.platform.is_windows():
-        return False, 'This audit module only runs on windows'
-    return True
+    return (
+        True
+        if hubblestack.utils.platform.is_windows()
+        else (False, 'This audit module only runs on windows')
+    )
 
 
 def execute(block_id, block_dict, extra_args=None):
@@ -238,8 +240,7 @@ def execute(block_id, block_dict, extra_args=None):
         tuple of result(value) and status(boolean)
     """
     log.debug('Executing win_secedit module for id: {0}'.format(block_id))
-    chained_result = runner_utils.get_chained_param(extra_args)
-    if chained_result:
+    if chained_result := runner_utils.get_chained_param(extra_args):
         sec_name = chained_result.get("name")
     else:
         sec_name = runner_utils.get_param_for_module(block_id, block_dict, 'name')
@@ -257,15 +258,14 @@ def execute(block_id, block_dict, extra_args=None):
         result = {'sec_name': sec_name, 'coded_sec_value': "No One", 'sec_value': ['']}
         log.debug("win_secedit module output for block_id %s, is %s", block_id, result)
         return runner_utils.prepare_positive_result_for_module(block_id, result)
-    if 'account' == value_type:
+    if value_type == 'account':
         sec_value = _get_account_name(coded_sec_value)
     elif 'MACHINE\\' in sec_name:
         sec_value = _reg_value_reverse_translator(coded_sec_value)
+    elif ',' in coded_sec_value:
+        sec_value = coded_sec_value.split(',')
     else:
-        if ',' in coded_sec_value:
-            sec_value = coded_sec_value.split(',')
-        else:
-            sec_value = [coded_sec_value]
+        sec_value = [coded_sec_value]
 
     if not sec_value:
         return runner_utils.prepare_negative_result_for_module(block_id, "security config value couldn't be fetched")
@@ -299,13 +299,12 @@ def validate_params(block_id, block_dict, extra_args=None):
     # fetch required param
     chained_pkg_name = None
     sec_name = None
-    chained_result = runner_utils.get_chained_param(extra_args)
-    if chained_result:
+    if chained_result := runner_utils.get_chained_param(extra_args):
         chained_pkg_name = chained_result.get("name")
     else:
         sec_name = runner_utils.get_param_for_module(block_id, block_dict, 'name')
     if not chained_pkg_name and not sec_name:
-        error['name'] = 'Mandatory parameter: name not found for id: %s' % block_id
+        error['name'] = f'Mandatory parameter: name not found for id: {block_id}'
 
     if error:
         raise HubbleCheckValidationError(error)
@@ -328,9 +327,7 @@ def get_filtered_params_to_log(block_id, block_dict, extra_args=None):
     """
     log.debug('get_filtered_params_to_log for win_secedit and id: {0}'.format(block_id))
 
-    # fetch required param
-    chained_result = runner_utils.get_chained_param(extra_args)
-    if chained_result:
+    if chained_result := runner_utils.get_chained_param(extra_args):
         sec_name = chained_result
     else:
         sec_name = runner_utils.get_param_for_module(block_id, block_dict, 'name')
@@ -343,10 +340,9 @@ def _secedit_export():
     specify the location of the file and the file will persist, or let the
     function create it and the file will be deleted on completion.  Should
     only be called once."""
-    dump = r"C:\ProgramData\{}.inf".format(uuid.uuid4())
+    dump = f"C:\ProgramData\{uuid.uuid4()}.inf"
     try:
-        ret = __mods__['cmd.run']('secedit /export /cfg {0}'.format(dump))
-        if ret:
+        if ret := __mods__['cmd.run']('secedit /export /cfg {0}'.format(dump)):
             secedit_ret = _secedit_import(dump)
             ret = __mods__['file.remove'](dump)
             return secedit_ret
@@ -363,12 +359,8 @@ def _secedit_import(inf_file):
         for line in f:
             line = str(line).replace('\r\n', '')
             if not line.startswith('[') and not line.startswith('Unicode'):
-                if line.find(' = ') != -1:
-                    k, v = line.split(' = ')
-                    sec_return[k] = v
-                else:
-                    k, v = line.split('=')
-                    sec_return[k] = v
+                k, v = line.split(' = ') if ' = ' in line else line.split('=')
+                sec_return[k] = v
     return sec_return
 
 
@@ -458,9 +450,12 @@ def _get_account_name(account_id):
     __sidaccounts__ = _get_account_sid()
     account_ids = account_id.split(',')
     for sec_value in account_ids:
-        for key, value in __sidaccounts__.items():
-            if sec_value[1:].lower() == value.lower():
-                ret_list.append(key)
+        ret_list.extend(
+            key
+            for key, value in __sidaccounts__.items()
+            if sec_value[1:].lower() == value.lower()
+        )
+
     return ret_list
 
 

@@ -15,9 +15,11 @@ __virtualname__ = 'win_gp'
 
 
 def __virtual__():
-    if not hubblestack.utils.platform.is_windows():
-        return False, 'This audit module only runs on windows'
-    return True
+    return (
+        True
+        if hubblestack.utils.platform.is_windows()
+        else (False, 'This audit module only runs on windows')
+    )
 
 def apply_labels(__data__, labels):
     """
@@ -139,9 +141,7 @@ def _get_tags(data):
                 # secedit:whitelist:PasswordComplexity:data:Windows 2012
                 if isinstance(tags, dict):
                     # malformed yaml, convert to list of dicts
-                    tmp = []
-                    for name, tag in tags.items():
-                        tmp.append({name: tag})
+                    tmp = [{name: tag} for name, tag in tags.items()]
                     tags = tmp
                 for item in tags:
                     for name, tag in item.items():
@@ -156,7 +156,7 @@ def _get_tags(data):
                                           'tag': tag,
                                           'module': 'win_gp',
                                           'type': toplist}
-                        formatted_data.update(tag_data)
+                        formatted_data |= tag_data
                         formatted_data.update(audit_data)
                         formatted_data.pop('data')
                         ret[tag].append(formatted_data)
@@ -168,25 +168,21 @@ def _get_gp_templates():
     if 'Workgroup' in domain_check:
         return []
 
-    list = __mods__['cmd.run']('Get-ChildItem //{0}/SYSVOL/{0}/Policies/PolicyDefinitions | Format-List '
-                               '-Property Name, SID'.format(domain_check['Domain']),
-                               shell='powershell', python_shell=True)
-    return list
+    return __mods__['cmd.run'](
+        'Get-ChildItem //{0}/SYSVOL/{0}/Policies/PolicyDefinitions | Format-List '
+        '-Property Name, SID'.format(domain_check['Domain']),
+        shell='powershell',
+        python_shell=True,
+    )
 
 
 def _translate_value_type(current, value, evaluator):
     if 'equal' in value:
-        if current == evaluator:
-            return True
-        else:
-            return False
+        return current == evaluator
 
 
 def _is_domain_controller():
     ret = __mods__['reg.read_value'](hive="HKLM",
                                      key=r"SYSTEM\CurrentControlSet\Control\ProductOptions",
                                      vname="ProductType")
-    if ret['vdata'] == "LanmanNT":
-        return True
-    else:
-        return False
+    return ret['vdata'] == "LanmanNT"

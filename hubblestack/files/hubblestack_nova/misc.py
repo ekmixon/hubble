@@ -176,7 +176,7 @@ def _get_tags(data):
                 ret[tag] = []
             formatted_data = {'tag': tag,
                               'module': 'misc'}
-            formatted_data.update(audit_data)
+            formatted_data |= audit_data
             formatted_data.update(tags)
             formatted_data.pop('data')
             ret[tag].append(formatted_data)
@@ -198,11 +198,7 @@ def _execute_shell_command(cmd, python_shell=False):
 def _is_valid_home_directory(directory_path, check_slash_home=False):
     directory_path = None if directory_path is None else directory_path.strip()
     if directory_path is not None and directory_path != "" and os.path.isdir(directory_path):
-        if check_slash_home and directory_path == "/":
-            return False
-        else:
-            return True
-
+        return not check_slash_home or directory_path != "/"
     return False
 
 
@@ -216,37 +212,25 @@ def _is_permission_in_limit(max_permission, given_permission):
     given_permission = int(given_permission)
     allowed_r = False
     allowed_w = False
-    allowed_x = False
     given_r = False
     given_w = False
-    given_x = False
-
     if max_permission >= 4:
         allowed_r = True
-        max_permission = max_permission - 4
+        max_permission -= 4
     if max_permission >= 2:
         allowed_w = True
-        max_permission = max_permission - 2
-    if max_permission >= 1:
-        allowed_x = True
-
+        max_permission -= 2
     if given_permission >= 4:
         given_r = True
-        given_permission = given_permission - 4
+        given_permission -= 4
     if given_permission >= 2:
         given_w = True
-        given_permission = given_permission - 2
-    if given_permission >= 1:
-        given_x = True
-
+        given_permission -= 2
+    given_x = given_permission >= 1
     if given_r and (not allowed_r):
         return False
-    if given_w and (not allowed_w):
-        return False
-    if given_x and (not allowed_x):
-        return False
-
-    return True
+    allowed_x = max_permission >= 1
+    return False if given_w and (not allowed_w) else not given_x or allowed_x
 
 
 def check_all_ports_firewall_rules(reason=''):
@@ -259,13 +243,14 @@ def check_all_ports_firewall_rules(reason=''):
     open_ports = open_ports.split('\n') if open_ports != "" else []
     firewall_ports = (_execute_shell_command('iptables -L INPUT -v -n | awk \'FNR > 2 && $11 != "" && $11 ~ /^dpt:/ {print $11}\' | sed -e "s/.*://"', python_shell=True)).strip()
     firewall_ports = firewall_ports.split('\n') if firewall_ports != "" else []
-    no_firewall_ports = []
+    no_firewall_ports = [
+        open_port
+        for open_port in open_ports
+        if open_port not in firewall_ports
+    ]
 
-    for open_port in open_ports:
-        if open_port not in firewall_ports:
-            no_firewall_ports.append(open_port)
 
-    return True if len(no_firewall_ports) == 0 else str(no_firewall_ports)
+    return str(no_firewall_ports) if no_firewall_ports else True
 
 
 def check_password_fields_not_empty(reason=''):
@@ -281,8 +266,6 @@ def ungrouped_files_or_dir(reason=''):
     Ensure no ungrouped files or directories exist
     """
     raise CommandExecutionError('Module disabled due to performance concerns')
-    result = _execute_shell_command('df --local -P | awk {\'if (NR!=1) print $6\'} | xargs -I \'{}\' find \'{}\' -xdev -nogroup', python_shell=True)
-    return True if result == '' else result
 
 
 def unowned_files_or_dir(reason=''):
@@ -290,8 +273,6 @@ def unowned_files_or_dir(reason=''):
     Ensure no unowned files or directories exist
     """
     raise CommandExecutionError('Module disabled due to performance concerns')
-    result = _execute_shell_command('df --local -P | awk {\'if (NR!=1) print $6\'} | xargs -I \'{}\' find \'{}\' -xdev -nouser', python_shell=True)
-    return True if result == '' else result
 
 
 def world_writable_file(reason=''):
@@ -299,8 +280,6 @@ def world_writable_file(reason=''):
     Ensure no world writable files exist
     """
     raise CommandExecutionError('Module disabled due to performance concerns')
-    result = _execute_shell_command('df --local -P | awk {\'if (NR!=1) print $6\'} | xargs -I \'{}\' find \'{}\' -xdev -type f -perm -0002', python_shell=True)
-    return True if result == '' else result
 
 
 def system_account_non_login(non_login_shell='/sbin/nologin', max_system_uid='500', except_for_users=''):
@@ -309,16 +288,19 @@ def system_account_non_login(non_login_shell='/sbin/nologin', max_system_uid='50
     """
 
     users_list = ['root','halt','sync','shutdown']
-    for user in except_for_users.split(","):
-        if user.strip() != "":
-            users_list.append(user.strip())
+    users_list.extend(
+        user.strip()
+        for user in except_for_users.split(",")
+        if user.strip() != ""
+    )
+
     result = []
     cmd = __mods__["cmd.run_all"]('egrep -v "^\\+" /etc/passwd')
     for line in cmd['stdout'].split('\n'):
         tokens = line.split(':')
         if tokens[0] not in users_list and int(tokens[2]) < int(max_system_uid) and tokens[6] not in ( non_login_shell , "/bin/false" ):
            result.append(line)
-    return True if result == [] else str(result)
+    return str(result) if result else True
 
 
 def sticky_bit_on_world_writable_dirs(reason=''):
@@ -326,8 +308,6 @@ def sticky_bit_on_world_writable_dirs(reason=''):
     Ensure sticky bit is set on all world-writable directories
     """
     raise CommandExecutionError('Module disabled due to performance concerns')
-    result = _execute_shell_command('df --local -P | awk {\'if (NR!=1) print $6\'} | xargs -I \'{}\' find \'{}\' -xdev -type d \\( -perm -0002 -a ! -perm -1000 \\) 2>/dev/null', python_shell=True)
-    return True if result == '' else "There are failures"
 
 
 def default_group_for_root(reason=''):
@@ -336,7 +316,7 @@ def default_group_for_root(reason=''):
     """
     result = _execute_shell_command('grep "^root:" /etc/passwd | cut -f4 -d:', python_shell=True)
     result = result.strip()
-    return True if result == '0' else False
+    return result == '0'
 
 
 def root_is_only_uid_0_account(reason=''):
@@ -354,21 +334,24 @@ def test_mount_attrs(mount_name, attribute, check_type='hard'):
     If check_type is hard, then in absence of volume, False will be returned
     """
     # check that the path exists on system
-    command = 'test -e ' + mount_name
+    command = f'test -e {mount_name}'
     results = __mods__['cmd.run_all'](command, ignore_retcode=True)
     retcode = results['retcode']
     if str(retcode) == '1':
-        return True if check_type == "soft" else (mount_name + " folder does not exist")
+        return True if check_type == "soft" else f"{mount_name} folder does not exist"
 
     # if the path exits, proceed with following code
     output = __mods__['cmd.run']('cat /proc/mounts')
     if not re.search(mount_name, output, re.M):
-        return True if check_type == "soft" else (mount_name + " is not mounted")
-    else:
-        for line in output.splitlines():
-            if mount_name in line and attribute not in line:
-                return str(line)
-    return True
+        return True if check_type == "soft" else f"{mount_name} is not mounted"
+    return next(
+        (
+            str(line)
+            for line in output.splitlines()
+            if mount_name in line and attribute not in line
+        ),
+        True,
+    )
 
 
 def check_time_synchronization(reason=''):
@@ -449,7 +432,7 @@ def check_duplicate_uids(reason=''):
     uids = _execute_shell_command("cat /etc/passwd | cut -f3 -d\":\"", python_shell=True).strip()
     uids = uids.split('\n') if uids != "" else []
     duplicate_uids = [k for k, v in Counter(uids).items() if v > 1]
-    if duplicate_uids is None or duplicate_uids == []:
+    if duplicate_uids is None or not duplicate_uids:
         return True
     return str(duplicate_uids)
 
@@ -461,7 +444,7 @@ def check_duplicate_gids(reason=''):
     gids = _execute_shell_command("cat /etc/group | cut -f3 -d\":\"", python_shell=True).strip()
     gids = gids.split('\n') if gids != "" else []
     duplicate_gids = [k for k, v in Counter(gids).items() if v > 1]
-    if duplicate_gids is None or duplicate_gids == []:
+    if duplicate_gids is None or not duplicate_gids:
         return True
     return str(duplicate_gids)
 
@@ -473,7 +456,7 @@ def check_duplicate_unames(reason=''):
     unames = _execute_shell_command("cat /etc/passwd | cut -f1 -d\":\"", python_shell=True).strip()
     unames = unames.split('\n') if unames != "" else []
     duplicate_unames = [k for k, v in Counter(unames).items() if v > 1]
-    if duplicate_unames is None or duplicate_unames == []:
+    if duplicate_unames is None or not duplicate_unames:
         return True
     return str(duplicate_unames)
 
@@ -485,7 +468,7 @@ def check_duplicate_gnames(reason=''):
     gnames = _execute_shell_command("cat /etc/group | cut -f1 -d\":\"", python_shell=True).strip()
     gnames = gnames.split('\n') if gnames != "" else []
     duplicate_gnames = [k for k, v in Counter(gnames).items() if v > 1]
-    if duplicate_gnames is None or duplicate_gnames == []:
+    if duplicate_gnames is None or not duplicate_gnames:
         return True
     return str(duplicate_gnames)
 
@@ -503,7 +486,7 @@ def check_directory_files_permission(path, permission):
     for file_in_directory in files_list:
         per = restrict_permissions(file_in_directory, permission)
         if per is not True:
-            bad_permission_files += [file_in_directory + ": Bad Permission - " + per + ":"]
+            bad_permission_files += [f"{file_in_directory}: Bad Permission - {per}:"]
     return True if bad_permission_files == [] else str(bad_permission_files)
 
 
@@ -529,17 +512,23 @@ def check_service_status(service_name, state):
     state can be enabled or disabled.
     """
     all_services = __mods__['cmd.run']('systemctl list-unit-files')
-    if re.search(service_name, all_services, re.M):
-        output = __mods__['cmd.retcode']('systemctl is-enabled ' + service_name, ignore_retcode=True)
-        if (state == "disabled" and str(output) == "1") or (state == "enabled" and str(output) == "0"):
-            return True
-        else:
-            return __mods__['cmd.run_stdout']('systemctl is-enabled ' + service_name, ignore_retcode=True)
+    if not re.search(service_name, all_services, re.M):
+        return (
+            True
+            if state == "disabled"
+            else f'Looks like {service_name} does not exists. Please check.'
+        )
+
+    output = __mods__['cmd.retcode'](
+        f'systemctl is-enabled {service_name}', ignore_retcode=True
+    )
+
+    if (state == "disabled" and str(output) == "1") or (state == "enabled" and str(output) == "0"):
+        return True
     else:
-        if state == "disabled":
-            return True
-        else:
-            return 'Looks like ' + service_name + ' does not exists. Please check.'
+        return __mods__['cmd.run_stdout'](
+            f'systemctl is-enabled {service_name}', ignore_retcode=True
+        )
 
 
 def check_ssh_timeout_config(reason=''):
@@ -548,14 +537,14 @@ def check_ssh_timeout_config(reason=''):
     """
 
     client_alive_interval = _execute_shell_command("grep \"^ClientAliveInterval\" /etc/ssh/sshd_config | awk '{print $NF}'", python_shell=True).strip()
-    if client_alive_interval != '' and int(client_alive_interval) <= 300:
-        client_alive_count_max = _execute_shell_command("grep \"^ClientAliveCountMax\" /etc/ssh/sshd_config | awk '{print $NF}'", python_shell=True).strip()
-        if client_alive_count_max != '' and int(client_alive_count_max) <= 3:
-            return True
-        else:
-            return "ClientAliveCountMax value should be less than equal to 3"
-    else:
+    if client_alive_interval == '' or int(client_alive_interval) > 300:
         return "ClientAliveInterval value should be less than equal to 300"
+    client_alive_count_max = _execute_shell_command("grep \"^ClientAliveCountMax\" /etc/ssh/sshd_config | awk '{print $NF}'", python_shell=True).strip()
+    return (
+        True
+        if client_alive_count_max != '' and int(client_alive_count_max) <= 3
+        else "ClientAliveCountMax value should be less than equal to 3"
+    )
 
 
 def check_unowned_files(reason=''):
@@ -563,15 +552,6 @@ def check_unowned_files(reason=''):
     Ensure no unowned files or directories exist
     """
     raise CommandExecutionError('Module disabled due to performance concerns')
-    unowned_files = _execute_shell_command("df --local -P | awk 'NR!=1 {print $6}' | xargs -I '{}' find '{}' -xdev -nouser 2>/dev/null", python_shell=True).strip()
-    unowned_files = unowned_files.split('\n') if unowned_files != "" else []
-    # The command above only searches local filesystems, there may still be compromised items on network
-    # mounted partitions.
-    # Following command will check each partition for unowned files
-    unowned_partition_files = _execute_shell_command("mount | awk '{print $3}' | xargs -I '{}' find '{}' -xdev -nouser 2>/dev/null", python_shell=True).strip()
-    unowned_partition_files = unowned_partition_files.split('\n') if unowned_partition_files != "" else []
-    unowned_files = unowned_files + unowned_partition_files
-    return True if unowned_files == [] else str(list(set(unowned_files)))
 
 
 def check_ungrouped_files(reason=''):
@@ -579,15 +559,6 @@ def check_ungrouped_files(reason=''):
     Ensure no ungrouped files or directories exist
     """
     raise CommandExecutionError('Module disabled due to performance concerns')
-    ungrouped_files = _execute_shell_command("df --local -P | awk 'NR!=1 {print $6}' | xargs -I '{}' find '{}' -xdev -nogroup 2>/dev/null", python_shell=True).strip()
-    ungrouped_files = ungrouped_files.split('\n') if ungrouped_files != "" else []
-    # The command above only searches local filesystems, there may still be compromised items on network
-    # mounted partitions.
-    # Following command will check each partition for unowned files
-    ungrouped_partition_files = _execute_shell_command("mount | awk '{print $3}' | xargs -I '{}' find '{}' -xdev -nogroup 2>/dev/null", python_shell=True).strip()
-    ungrouped_partition_files = ungrouped_partition_files.split('\n') if ungrouped_partition_files != "" else []
-    ungrouped_files = ungrouped_files + ungrouped_partition_files
-    return True if ungrouped_files == [] else str(list(set(ungrouped_files)))
 
 
 def check_all_users_home_directory(max_system_uid):
@@ -606,10 +577,13 @@ def check_all_users_home_directory(max_system_uid):
         if user_uid_dir[1].isdigit():
             if not _is_valid_home_directory(user_uid_dir[2], True) and int(user_uid_dir[1]) >= max_system_uid and user_uid_dir[0] != "nfsnobody" \
                     and 'nologin' not in user_uid_dir[3] and 'false' not in user_uid_dir[3]:
-                error += ["Either home directory " + user_uid_dir[2] + " of user " + user_uid_dir[0] + " is invalid or does not exist."]
+                error += [
+                    f"Either home directory {user_uid_dir[2]} of user {user_uid_dir[0]} is invalid or does not exist."
+                ]
+
         else:
-            error += ["User " + user_uid_dir[0] + " has invalid uid " + user_uid_dir[1]]
-    return True if not error else str(error)
+            error += [f"User {user_uid_dir[0]} has invalid uid {user_uid_dir[1]}"]
+    return str(error) if error else True
 
 
 def check_users_home_directory_permissions(max_allowed_permission='750', except_for_users=''):
@@ -617,16 +591,18 @@ def check_users_home_directory_permissions(max_allowed_permission='750', except_
     Ensure users' home directories permissions are 750 or more restrictive
     """
     users_list = ['root','halt','sync','shutdown']
-    for user in except_for_users.split(","):
-        if user.strip() != "":
-            users_list.append(user.strip())
+    users_list.extend(
+        user.strip()
+        for user in except_for_users.split(",")
+        if user.strip() != ""
+    )
 
     users_dirs = []
     cmd = __mods__["cmd.run_all"]('egrep -v "^\\+" /etc/passwd ')
     for line in cmd['stdout'].split('\n'):
         tokens = line.split(':')
         if tokens[0] not in users_list and 'nologin' not in tokens[6] and 'false' not in tokens[6]:
-            users_dirs.append(tokens[0] + " " + tokens[5])
+            users_dirs.append(f"{tokens[0]} {tokens[5]}")
     error = []
     for user_dir in users_dirs:
         user_dir = user_dir.split(" ")
@@ -635,7 +611,10 @@ def check_users_home_directory_permissions(max_allowed_permission='750', except_
         if _is_valid_home_directory(user_dir[1]):
             result = restrict_permissions(user_dir[1], max_allowed_permission)
             if result is not True:
-                error += ["permission on home directory " + user_dir[1] + " of user " + user_dir[0] + " is wrong: " + result]
+                error += [
+                    f"permission on home directory {user_dir[1]} of user {user_dir[0]} is wrong: {result}"
+                ]
+
 
     return True if error == [] else str(error)
 
@@ -657,16 +636,22 @@ def check_users_own_their_home(max_system_uid):
         if user_uid_dir[1].isdigit():
             if not _is_valid_home_directory(user_uid_dir[2]):
                 if int(user_uid_dir[1]) >= max_system_uid and 'nologin' not in user_uid_dir[3] and 'false' not in user_uid_dir[3]:
-                    error += ["Either home directory " + user_uid_dir[2] + " of user " + user_uid_dir[0] + " is invalid or does not exist."]
+                    error += [
+                        f"Either home directory {user_uid_dir[2]} of user {user_uid_dir[0]} is invalid or does not exist."
+                    ]
+
             elif int(user_uid_dir[1]) >= max_system_uid and user_uid_dir[0] != "nfsnobody" and 'nologin' not in user_uid_dir[3] \
                     and 'false' not in user_uid_dir[3]:
                 owner = __mods__['cmd.run']("stat -L -c \"%U\" \"" + user_uid_dir[2] + "\"")
                 if owner != user_uid_dir[0]:
-                    error += ["The home directory " + user_uid_dir[2] + " of user " + user_uid_dir[0] + " is owned by " + owner]
-        else:
-            error += ["User " + user_uid_dir[0] + " has invalid uid " + user_uid_dir[1]]
+                    error += [
+                        f"The home directory {user_uid_dir[2]} of user {user_uid_dir[0]} is owned by {owner}"
+                    ]
 
-    return True if not error else str(error)
+        else:
+            error += [f"User {user_uid_dir[0]} has invalid uid {user_uid_dir[1]}"]
+
+    return str(error) if error else True
 
 
 def check_users_dot_files(reason=''):
@@ -682,7 +667,10 @@ def check_users_dot_files(reason=''):
         if len(user_dir) < 2:
                 user_dir = user_dir + [''] * (2 - len(user_dir))
         if _is_valid_home_directory(user_dir[1]):
-            dot_files = _execute_shell_command("find " + user_dir[1] + " -name \".*\"").strip()
+            dot_files = _execute_shell_command(
+                f"find {user_dir[1]}" + " -name \".*\""
+            ).strip()
+
             dot_files = dot_files.split('\n') if dot_files != "" else []
             for dot_file in dot_files:
                 if os.path.isfile(dot_file):
@@ -690,9 +678,15 @@ def check_users_dot_files(reason=''):
                     given_permission = path_details.get('mode')
                     file_permission = given_permission[-3:]
                     if file_permission[1] in ["2", "3", "6", "7"]:
-                        error += ["Group Write permission set on file " + dot_file + " for user " + user_dir[0]]
+                        error += [
+                            f"Group Write permission set on file {dot_file} for user {user_dir[0]}"
+                        ]
+
                     if file_permission[2] in ["2", "3", "6", "7"]:
-                        error += ["Other Write permission set on file " + dot_file + " for user " + user_dir[0]]
+                        error += [
+                            f"Other Write permission set on file {dot_file} for user {user_dir[0]}"
+                        ]
+
 
     return True if error == [] else str(error)
 
@@ -710,9 +704,15 @@ def check_users_forward_files(reason=''):
         if len(user_dir) < 2:
                 user_dir = user_dir + [''] * (2 - len(user_dir))
         if _is_valid_home_directory(user_dir[1]):
-            forward_file = _execute_shell_command("find " + user_dir[1] + " -maxdepth 1 -name \".forward\"").strip()
+            forward_file = _execute_shell_command(
+                f"find {user_dir[1]}" + " -maxdepth 1 -name \".forward\""
+            ).strip()
+
             if forward_file is not None and os.path.isfile(forward_file):
-                error += ["Home directory: " + user_dir[1] + ", for user: " + user_dir[0] + " has " + forward_file + " file"]
+                error += [
+                    f"Home directory: {user_dir[1]}, for user: {user_dir[0]} has {forward_file} file"
+                ]
+
 
     return True if error == [] else str(error)
 
@@ -730,9 +730,15 @@ def check_users_netrc_files(reason=''):
         if len(user_dir) < 2:
                 user_dir = user_dir + [''] * (2 - len(user_dir))
         if _is_valid_home_directory(user_dir[1]):
-            netrc_file = _execute_shell_command("find " + user_dir[1] + " -maxdepth 1 -name \".netrc\"").strip()
+            netrc_file = _execute_shell_command(
+                f"find {user_dir[1]}" + " -maxdepth 1 -name \".netrc\""
+            ).strip()
+
             if netrc_file is not None and os.path.isfile(netrc_file):
-                error += ["Home directory: " + user_dir[1] + ", for user: " + user_dir[0] + " has .netrc file"]
+                error += [
+                    f"Home directory: {user_dir[1]}, for user: {user_dir[0]} has .netrc file"
+                ]
+
 
     return True if error == [] else str(error)
 
@@ -747,9 +753,13 @@ def check_groups_validity(reason=''):
     group_ids_in_passwd = list(set(group_ids_in_passwd))
     invalid_groups = []
     for group_id in group_ids_in_passwd:
-        group_presence_validity = _execute_shell_command("getent group " + group_id + " 2>/dev/null 1>/dev/null; echo $?", python_shell=True).strip()
+        group_presence_validity = _execute_shell_command(
+            f"getent group {group_id} 2>/dev/null 1>/dev/null; echo $?",
+            python_shell=True,
+        ).strip()
+
         if str(group_presence_validity) != "0":
-            invalid_groups += ["Invalid groupid: " + group_id + " in /etc/passwd file"]
+            invalid_groups += [f"Invalid groupid: {group_id} in /etc/passwd file"]
 
     return True if invalid_groups == [] else str(invalid_groups)
 
@@ -766,7 +776,7 @@ def ensure_reverse_path_filtering(reason=''):
     search_results = re.findall(r"rp_filter = (\d+)", output)
     result = int(search_results[0])
     if result < 1:
-        error_list.append("net.ipv4.conf.all.rp_filter  value set to " + str(result))
+        error_list.append(f"net.ipv4.conf.all.rp_filter  value set to {result}")
     command = "sysctl net.ipv4.conf.default.rp_filter 2> /dev/null"
     output = _execute_shell_command(command, python_shell=True)
     if output.strip() == '':
@@ -774,11 +784,8 @@ def ensure_reverse_path_filtering(reason=''):
     search_results = re.findall(r"rp_filter = (\d+)", output)
     result = int(search_results[0])
     if result < 1:
-        error_list.append("net.ipv4.conf.default.rp_filter  value set to " + str(result))
-    if len(error_list) > 0:
-        return str(error_list)
-    else:
-        return True
+        error_list.append(f"net.ipv4.conf.default.rp_filter  value set to {result}")
+    return str(error_list) if error_list else True
 
 
 def check_users_rhosts_files(reason=''):
@@ -794,9 +801,15 @@ def check_users_rhosts_files(reason=''):
         if len(user_dir) < 2:
             user_dir = user_dir + [''] * (2 - len(user_dir))
         if _is_valid_home_directory(user_dir[1]):
-            rhosts_file = _execute_shell_command("find " + user_dir[1] + " -maxdepth 1 -name \".rhosts\"").strip()
+            rhosts_file = _execute_shell_command(
+                f"find {user_dir[1]}" + " -maxdepth 1 -name \".rhosts\""
+            ).strip()
+
             if rhosts_file is not None and os.path.isfile(rhosts_file):
-                error += ["Home directory: " + user_dir[1] + ", for user: " + user_dir[0] + " has .rhosts file"]
+                error += [
+                    f"Home directory: {user_dir[1]}, for user: {user_dir[0]} has .rhosts file"
+                ]
+
     return True if error == [] else str(error)
 
 
@@ -878,10 +891,7 @@ def _grep(path,
     """
     path = os.path.expanduser(path)
 
-    if args:
-        options = ' '.join(args)
-    else:
-        options = ''
+    options = ' '.join(args) if args else ''
     cmd = (
         r'''grep  {options} {pattern} {path}'''
         .format(
@@ -934,22 +944,22 @@ def check_list_values(file_path, match_pattern, value_pattern, grep_arg, white_l
     grep_args = [] if grep_arg is None else [grep_arg]
     matched_lines = _grep(file_path, match_pattern, *grep_args).get('stdout')
     if not matched_lines:
-        return "No match found for the given pattern: " + str(match_pattern)
+        return f"No match found for the given pattern: {str(match_pattern)}"
 
     matched_lines = matched_lines.split('\n') if matched_lines is not None else []
     error = []
     for matched_line in matched_lines:
         regexp = re.compile(value_pattern)
-        matched_values = regexp.search(matched_line).group(1)
+        matched_values = regexp.search(matched_line)[1]
         matched_values = matched_values.strip().split(value_delimter) if matched_values is not None else []
         if white_list is not None:
             values_not_in_white_list = list(set(matched_values) - set(white_list.strip().split(list_delimter)))
             if values_not_in_white_list != []:
-                error += ["values not in whitelist: " + str(values_not_in_white_list)]
+                error += [f"values not in whitelist: {values_not_in_white_list}"]
         else:
             values_in_black_list = list(set(matched_values).intersection(set(black_list.strip().split(list_delimter))))
             if values_in_black_list != []:
-                error += ["values in blacklist: " + str(values_in_black_list)]
+                error += [f"values in blacklist: {values_in_black_list}"]
 
     return True if error == [] else str(error)
 
@@ -973,12 +983,7 @@ def check_if_any_pkg_installed(args):
     :param args: Comma separated list of packages those needs to be verified
     :return: True if any of the input package is installed else False
     """
-    result = False
-    for pkg in args.split(','):
-        if __mods__['pkg.version'](pkg):
-            result = True
-            break
-    return result
+    return any(__mods__['pkg.version'](pkg) for pkg in args.split(','))
 
 def ensure_max_password_expiration(allow_max_days, except_for_users=''):
     """
@@ -993,25 +998,34 @@ def ensure_max_password_expiration(allow_max_days, except_for_users=''):
     if not _is_int(system_pass_max_days):
         return "PASS_MAX_DAYS must be set properly"
     if int(system_pass_max_days) > allow_max_days:
-        return "PASS_MAX_DAYS must be less than or equal to " + str(allow_max_days)
+        return f"PASS_MAX_DAYS must be less than or equal to {str(allow_max_days)}"
 
     #fetch all users with passwords
     grep_args.append('-E')
     all_users = _grep('/etc/shadow', r'^[^:]+:[^\!*]', *grep_args).get('stdout')
 
-    except_for_users_list=[]
-    for user in except_for_users.split(","):
-        if user.strip() != "":
-            except_for_users_list.append(user.strip())
+    except_for_users_list = [
+        user.strip()
+        for user in except_for_users.split(",")
+        if user.strip() != ""
+    ]
+
     result = []
     for line in all_users.split('\n'):
         user = line.split(':')[0]
         #As per CIS doc, 5th field is the password max expiry days
         user_passwd_expiry = line.split(':')[4]
-        if not user in except_for_users_list and _is_int(user_passwd_expiry) and int(user_passwd_expiry) > allow_max_days:
-            result.append('User ' + user + ' has max password expiry days ' + user_passwd_expiry + ', which is more than ' + str(allow_max_days))
+        if (
+            user not in except_for_users_list
+            and _is_int(user_passwd_expiry)
+            and int(user_passwd_expiry) > allow_max_days
+        ):
+            result.append(
+                f'User {user} has max password expiry days {user_passwd_expiry}, which is more than {str(allow_max_days)}'
+            )
 
-    return True if result == [] else str(result)
+
+    return str(result) if result else True
 
 def _is_int(input):
     try:
@@ -1058,25 +1072,30 @@ def check_sshd_paramters(pattern, values=None, comparetype='regex'):
     if comparetype == 'only':
         if not values:
             return "You need to provide values for comparetype 'only'."
-        else:
-            for line in output.splitlines():
-                if re.match(pattern, line, re.I):
-                    expected_values = values.split(',')
-                    found_values = line[len(pattern):].strip().split(',')
-                    for found_value in found_values:
-                        if found_value in expected_values:
-                            continue
-                        else:
-                            return "Allowed values for pattern: " + pattern + " are " + values
-                    return True
-            return "Looks like pattern i.e. " + pattern + " not found in sshd -T. Please check."
+        for line in output.splitlines():
+            if re.match(pattern, line, re.I):
+                expected_values = values.split(',')
+                found_values = line[len(pattern):].strip().split(',')
+                return next(
+                    (
+                        f"Allowed values for pattern: {pattern} are {values}"
+                        for found_value in found_values
+                        if found_value not in expected_values
+                    ),
+                    True,
+                )
+
+        return f"Looks like pattern i.e. {pattern} not found in sshd -T. Please check."
     elif comparetype == 'regex':
         if re.search(pattern, output, re.M | re.I):
             return True
         else:
-            return "Looks like pattern i.e. " + pattern + " not found in sshd -T. Please check."
+            return f"Looks like pattern i.e. {pattern} not found in sshd -T. Please check."
     else:
-        return "The comparetype: " + comparetype + " not found. It can be 'regex' or 'only'. Please check."
+        return (
+            f"The comparetype: {comparetype}"
+            + " not found. It can be 'regex' or 'only'. Please check."
+        )
 
 
 def test_success():

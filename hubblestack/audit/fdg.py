@@ -203,7 +203,10 @@ def validate_params(block_id, block_dict, extra_args=None):
     if not fdg_file_chained:
         fdg_file = runner_utils.get_param_for_module(block_id, block_dict, 'fdg_file')
     if not fdg_file_chained and not fdg_file:
-        error['fdg_file'] = 'Mandatory parameter: fdg_file not found for id: %s' % (block_id)
+        error[
+            'fdg_file'
+        ] = f'Mandatory parameter: fdg_file not found for id: {block_id}'
+
 
     if error:
         raise HubbleCheckValidationError(error)
@@ -302,7 +305,7 @@ def _get_consolidated_result(fdg_run, consolidation_operator):
     if not consolidation_operator:
         log.error("invalid value of consolidation operator %s found, returning False", consolidation_operator)
         return fdg_run, False
-    if consolidation_operator != "and" and consolidation_operator != "or":
+    if consolidation_operator not in ["and", "or"]:
         log.error("operator %s not supported, returning False", consolidation_operator)
         return fdg_run, False
 

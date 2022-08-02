@@ -5,6 +5,7 @@ encrypted keys to general payload dynamics and packaging, these happen
 in here
 '''
 
+
 # import sys  # Use if sys is commented out below
 import logging
 import gc
@@ -27,9 +28,8 @@ try:
     if msgpack.version >= (0, 4, 0):
         if msgpack.loads(msgpack.dumps([1, 2, 3], use_bin_type=False), use_list=True) is None:
             raise ImportError
-    else:
-        if msgpack.loads(msgpack.dumps([1, 2, 3]), use_list=True) is None:
-            raise ImportError
+    elif msgpack.loads(msgpack.dumps([1, 2, 3]), use_list=True) is None:
+        raise ImportError
     HAS_MSGPACK = True
 except ImportError:
     # Fall back to msgpack_pure
@@ -81,9 +81,7 @@ def format_payload(enc, **kwargs):
     then a list of keyword args to generate the body of the load dict.
     '''
     payload = {'enc': enc}
-    load = {}
-    for key in kwargs:
-        load[key] = kwargs[key]
+    load = {key: kwargs[key] for key in kwargs}
     payload['load'] = load
     return package(payload)
 
@@ -134,10 +132,7 @@ class Serial(object):
                 # that under Python 2 we can still work with older versions
                 # of msgpack.
                 if msgpack.version >= (0, 5, 2):
-                    if encoding is None:
-                        loads_kwargs['raw'] = True
-                    else:
-                        loads_kwargs['raw'] = False
+                    loads_kwargs['raw'] = encoding is None
                 else:
                     loads_kwargs['encoding'] = encoding
                 try:
@@ -233,10 +228,7 @@ class Serial(object):
                     return obj
                 # A value of an Integer object is limited from -(2^63) upto (2^64)-1 by MessagePack
                 # spec. Here we care only of JIDs that are positive integers.
-                if isinstance(obj, int) and obj >= pow(2, 64):
-                    return str(obj)
-                else:
-                    return obj
+                return str(obj) if isinstance(obj, int) and obj >= pow(2, 64) else obj
 
             msg = verylong_encoder(msg)
             if msgpack.version >= (0, 4, 0):

@@ -17,17 +17,14 @@ def __virtual__():
     """
     Load domain controller grain
     """
-    if not hubblestack.utils.platform.is_windows():
-        return False, "The grain will only run on Windows systems"
-    return __virtualname__
+    return (
+        __virtualname__
+        if hubblestack.utils.platform.is_windows()
+        else (False, "The grain will only run on Windows systems")
+    )
 
 
 def get_domain_controller():
-    domain_controller_grain={}
     reg_val = hubblestack.utils.win_reg.read_value(hive="HKLM", key=r"SYSTEM\CurrentControlSet\Control\ProductOptions", vname="ProductType")
 
-    if reg_val['vdata'] == 'LanmanNT':
-        domain_controller_grain['domain_controller'] = True
-    else:
-        domain_controller_grain['domain_controller'] = False
-    return domain_controller_grain
+    return {'domain_controller': reg_val['vdata'] == 'LanmanNT'}

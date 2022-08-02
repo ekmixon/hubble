@@ -122,74 +122,80 @@ def audit(data_list, tags, labels, debug=False, **kwargs):
                 audittype = tag_data['type']
 
                 # Blacklisted packages (must not be installed)
-                if audittype == 'blacklist':
-                    if __mods__['pkg.version'](name):
-                        tag_data['failure_reason'] = "Found blacklisted package '{0}'" \
-                                                     " installed on the system" \
-                                                     .format(name)
-                        ret['Failure'].append(tag_data)
-                    else:
-                        ret['Success'].append(tag_data)
+                if audittype == 'blacklist' and __mods__['pkg.version'](name):
+                    tag_data['failure_reason'] = "Found blacklisted package '{0}'" \
+                                                 " installed on the system" \
+                                                 .format(name)
+                    ret['Failure'].append(tag_data)
+                elif (
+                    audittype == 'blacklist'
+                    and not __mods__['pkg.version'](name)
+                    or audittype != 'blacklist'
+                    and audittype == 'whitelist'
+                    and 'version' not in tag_data
+                    and __mods__['pkg.version'](name)
+                ):
+                    ret['Success'].append(tag_data)
 
-                # Whitelisted packages (must be installed)
+                elif (
+                    audittype != 'blacklist'
+                    and audittype == 'whitelist'
+                    and 'version' not in tag_data
+                    and not __mods__['pkg.version'](name)
+                ):
+                    tag_data['failure_reason'] = "Could not find requisite package '{0}' installed" \
+                                                 " on the system".format(name)
+                    ret['Failure'].append(tag_data)
+
                 elif audittype == 'whitelist':
-                    if 'version' in tag_data:
-                        mod, _, version = tag_data['version'].partition('=')
-                        if not version:
-                            version = mod
-                            mod = ''
+                    mod, _, version = tag_data['version'].partition('=')
+                    if not version:
+                        version = mod
+                        mod = ''
 
-                        if mod == '<':
-                            if (LooseVersion(__mods__['pkg.version'](name)) <=
-                                    LooseVersion(version)):
-                                ret['Success'].append(tag_data)
-                            else:
-                                tag_data['failure_reason'] = "Could not find requisite package '{0}' with" \
-                                                             " version less than or equal to '{1}' " \
-                                                             "installed on the system" \
-                                                             .format(name, version)
-                                ret['Failure'].append(tag_data)
-
-                        elif mod == '>':
-                            if (LooseVersion(__mods__['pkg.version'](name)) >=
-                                    LooseVersion(version)):
-                                ret['Success'].append(tag_data)
-                            else:
-                                tag_data['failure_reason'] = "Could not find requisite package '{0}' " \
-                                                             "with version greater than or equal to '{1}'" \
-                                                             " installed on the system" \
-                                                             .format(name, version)
-                                ret['Failure'].append(tag_data)
-
-                        elif not mod:
-                            # Just peg to the version, no > or <
-                            if __mods__['pkg.version'](name) == version:
-                                ret['Success'].append(tag_data)
-                            else:
-                                tag_data['failure_reason'] = "Could not find the version '{0}' of requisite" \
-                                                             " package '{1}' installed on the system" \
-                                                             .format(version, name)
-                                ret['Failure'].append(tag_data)
-
-                        else:
-                            # Invalid modifier
-                            log.error('Invalid modifier in version {0} for pkg {1} audit {2}'
-                                      .format(tag_data['version'], name, tag))
-                            tag_data = copy.deepcopy(tag_data)
-                            # Include an error in the failure
-                            tag_data['error'] = 'Invalid modifier {0}'.format(mod)
-                            tag_data['failure_reason'] = 'Invalid modifier in version {0} for pkg {1} audit' \
-                                                         ' {2}. Seems like a bug in hubble profile.' \
-                                                         .format(tag_data['version'], name, tag)
-                            ret['Failure'].append(tag_data)
-
-                    else:  # No version checking
-                        if __mods__['pkg.version'](name):
+                    if mod == '<':
+                        if (LooseVersion(__mods__['pkg.version'](name)) <=
+                                LooseVersion(version)):
                             ret['Success'].append(tag_data)
                         else:
-                            tag_data['failure_reason'] = "Could not find requisite package '{0}' installed" \
-                                                         " on the system".format(name)
+                            tag_data['failure_reason'] = "Could not find requisite package '{0}' with" \
+                                                         " version less than or equal to '{1}' " \
+                                                         "installed on the system" \
+                                                         .format(name, version)
                             ret['Failure'].append(tag_data)
+
+                    elif mod == '>':
+                        if (LooseVersion(__mods__['pkg.version'](name)) >=
+                                LooseVersion(version)):
+                            ret['Success'].append(tag_data)
+                        else:
+                            tag_data['failure_reason'] = "Could not find requisite package '{0}' " \
+                                                         "with version greater than or equal to '{1}'" \
+                                                         " installed on the system" \
+                                                         .format(name, version)
+                            ret['Failure'].append(tag_data)
+
+                    elif not mod:
+                        # Just peg to the version, no > or <
+                        if __mods__['pkg.version'](name) == version:
+                            ret['Success'].append(tag_data)
+                        else:
+                            tag_data['failure_reason'] = "Could not find the version '{0}' of requisite" \
+                                                         " package '{1}' installed on the system" \
+                                                         .format(version, name)
+                            ret['Failure'].append(tag_data)
+
+                    else:
+                        # Invalid modifier
+                        log.error('Invalid modifier in version {0} for pkg {1} audit {2}'
+                                  .format(tag_data['version'], name, tag))
+                        tag_data = copy.deepcopy(tag_data)
+                        # Include an error in the failure
+                        tag_data['error'] = 'Invalid modifier {0}'.format(mod)
+                        tag_data['failure_reason'] = 'Invalid modifier in version {0} for pkg {1} audit' \
+                                                     ' {2}. Seems like a bug in hubble profile.' \
+                                                     .format(tag_data['version'], name, tag)
+                        ret['Failure'].append(tag_data)
 
     return ret
 
@@ -242,9 +248,7 @@ def _get_tags(data):
                 # pkg:blacklist:0:telnet:data:Debian-8
                 if isinstance(tags, dict):
                     # malformed yaml, convert to list of dicts
-                    tmp = []
-                    for name, tag in tags.items():
-                        tmp.append({name: tag})
+                    tmp = [{name: tag} for name, tag in tags.items()]
                     tags = tmp
                 for item in tags:
                     for name, tag in item.items():
@@ -259,7 +263,7 @@ def _get_tags(data):
                                           'tag': tag,
                                           'module': 'pkg',
                                           'type': toplist}
-                        formatted_data.update(tag_data)
+                        formatted_data |= tag_data
                         formatted_data.update(audit_data)
                         formatted_data.pop('data')
                         ret[tag].append(formatted_data)

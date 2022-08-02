@@ -143,7 +143,7 @@ def _linux_cpudata():
         with hubblestack.utils.files.fopen(cpuinfo, 'r') as _fp:
             for line in _fp:
                 comps = line.split(':')
-                if not len(comps) > 1:
+                if len(comps) <= 1:
                     continue
                 key = comps[0].strip()
                 val = comps[1].strip()
@@ -151,24 +151,8 @@ def _linux_cpudata():
                     grains['num_cpus'] = int(val) + 1
                 elif key == 'model name':
                     grains['cpu_model'] = val
-                elif key == 'flags':
+                elif key in ['flags', 'Features']:
                     grains['cpu_flags'] = val.split()
-                elif key == 'Features':
-                    grains['cpu_flags'] = val.split()
-                # ARM support - /proc/cpuinfo
-                #
-                # Processor       : ARMv6-compatible processor rev 7 (v6l)
-                # BogoMIPS        : 697.95
-                # Features        : swp half thumb fastmult vfp edsp java tls
-                # CPU implementer : 0x41
-                # CPU architecture: 7
-                # CPU variant     : 0x0
-                # CPU part        : 0xb76
-                # CPU revision    : 7
-                #
-                # Hardware        : BCM2708
-                # Revision        : 0002
-                # Serial          : 00000000
                 elif key == 'Processor':
                     grains['cpu_model'] = val.split('-')[0]
                     grains['num_cpus'] = 1
@@ -242,19 +226,14 @@ def _linux_gpu_data():
     gpus = []
     for gpu in devs:
         vendor_strings = gpu['Vendor'].lower().split()
-        # default vendor to 'unknown', overwrite if we match a known one
-        vendor = 'unknown'
-        for name in known_vendors:
-            # search for an 'expected' vendor name in the list of strings
-            if name in vendor_strings:
-                vendor = name
-                break
+        vendor = next(
+            (name for name in known_vendors if name in vendor_strings),
+            'unknown',
+        )
+
         gpus.append({'vendor': vendor, 'model': gpu['Device']})
 
-    grains = {}
-    grains['num_gpus'] = len(gpus)
-    grains['gpus'] = gpus
-    return grains
+    return {'num_gpus': len(gpus), 'gpus': gpus}
 
 
 def _netbsd_gpu_data():
@@ -272,20 +251,16 @@ def _netbsd_gpu_data():
 
         for line in pcictl_out.splitlines():
             for vendor in known_vendors:
-                vendor_match = re.match(
+                if vendor_match := re.match(
                     r'[0-9:]+ ({0}) (.+) \(VGA .+\)'.format(vendor),
                     line,
-                    re.IGNORECASE
-                )
-                if vendor_match:
-                    gpus.append({'vendor': vendor_match.group(1), 'model': vendor_match.group(2)})
+                    re.IGNORECASE,
+                ):
+                    gpus.append({'vendor': vendor_match[1], 'model': vendor_match[2]})
     except OSError:
         pass
 
-    grains = {}
-    grains['num_gpus'] = len(gpus)
-    grains['gpus'] = gpus
-    return grains
+    return {'num_gpus': len(gpus), 'gpus': gpus}
 
 
 def _osx_gpudata():
@@ -310,10 +285,7 @@ def _osx_gpudata():
     except OSError:
         pass
 
-    grains = {}
-    grains['num_gpus'] = len(gpus)
-    grains['gpus'] = gpus
-    return grains
+    return {'num_gpus': len(gpus), 'gpus': gpus}
 
 
 def _bsd_cpudata(osdata):
@@ -330,11 +302,12 @@ def _bsd_cpudata(osdata):
     cmds = {}
 
     if sysctl:
-        cmds.update({
+        cmds |= {
             'num_cpus': '{0} -n hw.ncpu'.format(sysctl),
             'cpuarch': '{0} -n hw.machine'.format(sysctl),
             'cpu_model': '{0} -n hw.model'.format(sysctl),
-        })
+        }
+
 
     if arch and osdata['kernel'] == 'OpenBSD':
         cmds['cpuarch'] = '{0} -s'.format(arch)
@@ -351,9 +324,10 @@ def _bsd_cpudata(osdata):
     if osdata['kernel'] == 'NetBSD':
         grains['cpu_flags'] = []
         for line in __mods__['cmd.run']('cpuctl identify 0').splitlines():
-            cpu_match = re.match(r'cpu[0-9]:\ features[0-9]?\ .+<(.+)>', line)
-            if cpu_match:
-                flag = cpu_match.group(1).split(',')
+            if cpu_match := re.match(
+                r'cpu[0-9]:\ features[0-9]?\ .+<(.+)>', line
+            ):
+                flag = cpu_match[1].split(',')
                 grains['cpu_flags'].extend(flag)
 
     if osdata['kernel'] == 'FreeBSD' and os.path.isfile('/var/run/dmesg.boot'):
@@ -391,22 +365,17 @@ def _sunos_cpudata():
     #   num_cpus
     #   cpu_model
     #   cpu_flags
-    grains = {}
-    grains['cpu_flags'] = []
-
-    grains['cpuarch'] = __mods__['cmd.run']('isainfo -k')
+    grains = {'cpu_flags': [], 'cpuarch': __mods__['cmd.run']('isainfo -k')}
     psrinfo = '/usr/sbin/psrinfo 2>/dev/null'
     grains['num_cpus'] = len(__mods__['cmd.run'](psrinfo, python_shell=True).splitlines())
     kstat_info = 'kstat -p cpu_info:*:*:brand'
     for line in __mods__['cmd.run'](kstat_info).splitlines():
-        match = re.match(r'(\w+:\d+:\w+\d+:\w+)\s+(.+)', line)
-        if match:
-            grains['cpu_model'] = match.group(2)
+        if match := re.match(r'(\w+:\d+:\w+\d+:\w+)\s+(.+)', line):
+            grains['cpu_model'] = match[2]
     isainfo = 'isainfo -n -v'
     for line in __mods__['cmd.run'](isainfo).splitlines():
-        match = re.match(r'^\s+(.+)', line)
-        if match:
-            cpu_flags = match.group(1).split()
+        if match := re.match(r'^\s+(.+)', line):
+            cpu_flags = match[1].split()
             grains['cpu_flags'].extend(cpu_flags)
 
     return grains
@@ -422,8 +391,7 @@ def _aix_cpudata():
     #   cpu_model
     #   cpu_flags
     grains = {}
-    cmd = hubblestack.utils.path.which('prtconf')
-    if cmd:
+    if cmd := hubblestack.utils.path.which('prtconf'):
         data = __mods__['cmd.run']('{0}'.format(cmd)) + os.linesep
         for dest, regstring in (('cpuarch', r'(?im)^\s*Processor\s+Type:\s+(\S+)'),
                                 ('cpu_flags', r'(?im)^\s*Processor\s+Version:\s+(\S+)'),
@@ -449,7 +417,7 @@ def _linux_memdata():
         with hubblestack.utils.files.fopen(meminfo, 'r') as ifile:
             for line in ifile:
                 comps = line.rstrip('\n').split(':')
-                if not len(comps) > 1:
+                if len(comps) <= 1:
                     continue
                 if comps[0].strip() == 'MemTotal':
                     # Use floor division to force output to be an integer
@@ -466,8 +434,7 @@ def _osx_memdata():
     '''
     grains = {'mem_total': 0, 'swap_total': 0}
 
-    sysctl = hubblestack.utils.path.which('sysctl')
-    if sysctl:
+    if sysctl := hubblestack.utils.path.which('sysctl'):
         mem = __mods__['cmd.run']('{0} -n hw.memsize'.format(sysctl))
         swap_total = __mods__['cmd.run']('{0} -n vm.swapusage'.format(sysctl)).split()[2].replace(',', '.')
         if swap_total.endswith('K'):
@@ -489,8 +456,7 @@ def _bsd_memdata(osdata):
     '''
     grains = {'mem_total': 0, 'swap_total': 0}
 
-    sysctl = hubblestack.utils.path.which('sysctl')
-    if sysctl:
+    if sysctl := hubblestack.utils.path.which('sysctl'):
         mem = __mods__['cmd.run']('{0} -n hw.physmem'.format(sysctl))
         if osdata['kernel'] == 'NetBSD' and mem.startswith('-'):
             mem = __mods__['cmd.run']('{0} -n hw.physmem64'.format(sysctl))
@@ -538,8 +504,7 @@ def _aix_memdata():
     Return the memory information for AIX systems
     '''
     grains = {'mem_total': 0, 'swap_total': 0}
-    prtconf = hubblestack.utils.path.which('prtconf')
-    if prtconf:
+    if prtconf := hubblestack.utils.path.which('prtconf'):
         for line in __mods__['cmd.run'](prtconf, python_shell=True).splitlines():
             comps = [x for x in line.strip().split(' ') if x]
             if len(comps) > 2 and 'Memory' in comps[0] and 'Size' in comps[1]:
@@ -548,8 +513,7 @@ def _aix_memdata():
     else:
         log.error('The \'prtconf\' binary was not found in $PATH.')
 
-    swap_cmd = hubblestack.utils.path.which('swap')
-    if swap_cmd:
+    if swap_cmd := hubblestack.utils.path.which('swap'):
         swap_data = __mods__['cmd.run']('{0} -s'.format(swap_cmd)).split()
         try:
             swap_total = (int(swap_data[-2]) + int(swap_data[-6])) * 4
@@ -565,12 +529,9 @@ def _windows_memdata():
     '''
     Return the memory information for Windows systems
     '''
-    grains = {'mem_total': 0}
     # get the Total Physical memory as reported by msinfo32
     tot_bytes = win32api.GlobalMemoryStatusEx()['TotalPhys']
-    # return memory info in gigabytes
-    grains['mem_total'] = int(tot_bytes / (1024 ** 2))
-    return grains
+    return {'mem_total': int(tot_bytes / (1024 ** 2))}
 
 
 def _memdata(osdata):
@@ -582,7 +543,7 @@ def _memdata(osdata):
     #   swap_total, for supported systems.
     grains = {'mem_total': 0}
     if osdata['kernel'] == 'Linux':
-        grains.update(_linux_memdata())
+        grains |= _linux_memdata()
     elif osdata['kernel'] in ('FreeBSD', 'OpenBSD', 'NetBSD'):
         grains.update(_bsd_memdata(osdata))
     elif osdata['kernel'] == 'Darwin':
@@ -601,8 +562,7 @@ def _aix_get_machine_id():
     Parse the output of lsattr -El sys0 for os_uuid
     '''
     grains = {}
-    cmd = hubblestack.utils.path.which('lsattr')
-    if cmd:
+    if cmd := hubblestack.utils.path.which('lsattr'):
         data = __mods__['cmd.run']('{0} -El sys0'.format(cmd)) + os.linesep
         uuid_regexes = [re.compile(r'(?im)^\s*os_uuid\s+(\S+)\s+(.*)')]
         for regex in uuid_regexes:
@@ -622,7 +582,7 @@ def _windows_virtual(osdata):
     # Provides:
     #   virtual
     #   virtual_subtype
-    grains = dict()
+    grains = {}
     if osdata['kernel'] != 'Windows':
         return grains
 

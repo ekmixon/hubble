@@ -77,11 +77,8 @@ def find_file(path, saltenv='base', **kwargs):
     if 'index' in kwargs:
         try:
             root = __opts__['file_roots'][saltenv][int(kwargs['index'])]
-        except IndexError:
+        except (IndexError, ValueError):
             # An invalid index was passed
-            return fnd
-        except ValueError:
-            # An invalid index option was passed
             return fnd
         full = os.path.join(root, path)
         if os.path.isfile(full) and not hubblestack.fileserver.is_file_ignored(__opts__, full):
@@ -257,11 +254,7 @@ def file_hash(load, fnd):
         try:
             os.makedirs(cache_dir)
         except OSError as err:
-            if err.errno == errno.EEXIST:
-                # rarely, the directory can be already concurrently created between
-                # the os.path.exists and the os.makedirs lines above
-                pass
-            else:
+            if err.errno != errno.EEXIST:
                 raise
     # save the cache object "hash:mtime"
     cache_object = '{0}:{1}'.format(ret['hsum'], os.path.getmtime(path))
@@ -318,10 +311,7 @@ def _file_lists(load, form):
                 abs_path = os.path.join(parent_dir, item)
                 log.trace('roots: Processing %s', abs_path)
                 is_link = hubblestack.utils.path.islink(abs_path)
-                log.trace(
-                    'roots: %s is %sa link',
-                    abs_path, 'not ' if not is_link else ''
-                )
+                log.trace('roots: %s is %sa link', abs_path, '' if is_link else 'not ')
                 if is_link and __opts__['fileserver_ignoresymlinks']:
                     continue
                 rel_path = _translate_sep(os.path.relpath(abs_path, fs_root))
@@ -429,15 +419,10 @@ def symlink_list(load):
         # "env" is not supported; Use "saltenv".
         load.pop('env')
 
-    ret = {}
     if load['saltenv'] not in __opts__['file_roots']:
-        return ret
+        return {}
 
-    if 'prefix' in load:
-        prefix = load['prefix'].strip('/')
-    else:
-        prefix = ''
-
+    prefix = load['prefix'].strip('/') if 'prefix' in load else ''
     symlinks = _file_lists(load, 'links')
     return dict([(key, val)
                  for key, val in symlinks.items()

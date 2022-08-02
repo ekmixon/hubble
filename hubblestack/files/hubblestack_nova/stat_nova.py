@@ -106,16 +106,27 @@ def audit(data_list, tags, labels, debug=False, **kwargs):
                     ret['Controlled'].append(tag_data)
                     continue
                 name = tag_data['name']
-                expected = {}
-                for e in ['mode', 'user', 'uid', 'group', 'gid', 'allow_more_strict', 'match_on_file_missing']:
-                    if e in tag_data:
-                        expected[e] = tag_data[e]
+                expected = {
+                    e: tag_data[e]
+                    for e in [
+                        'mode',
+                        'user',
+                        'uid',
+                        'group',
+                        'gid',
+                        'allow_more_strict',
+                        'match_on_file_missing',
+                    ]
+                    if e in tag_data
+                }
 
-                if 'allow_more_strict' in expected.keys() and 'mode' not in expected.keys():
-                    reason_dict = {}
+                if (
+                    'allow_more_strict' in expected
+                    and 'mode' not in expected.keys()
+                ):
                     reason = "'allow_more_strict' tag can't be specified without 'mode' tag." \
                              " Seems like a bug in hubble profile."
-                    reason_dict['allow_more_strict'] = reason
+                    reason_dict = {'allow_more_strict': reason}
                     tag_data['failure_reason'] = "For file '{0}': {1}".format(name, reason_dict)
                     ret['Failure'].append(tag_data)
                     continue
@@ -130,9 +141,11 @@ def audit(data_list, tags, labels, debug=False, **kwargs):
                 else:
                     salt_ret = {}
                 if not salt_ret:
-                    if not expected:
-                        ret['Success'].append(tag_data)
-                    elif 'match_on_file_missing' in expected.keys() and expected['match_on_file_missing']:
+                    if (
+                        not expected
+                        or 'match_on_file_missing' in expected
+                        and expected['match_on_file_missing']
+                    ):
                         ret['Success'].append(tag_data)
                     else:
                         tag_data['failure_reason'] = "Could not get access any file at '{0}'. " \
@@ -143,8 +156,8 @@ def audit(data_list, tags, labels, debug=False, **kwargs):
 
                 passed = True
                 reason_dict = {}
-                for e in expected.keys():
-                    if e == 'allow_more_strict' or e == 'match_on_file_missing':
+                for e in expected:
+                    if e in ['allow_more_strict', 'match_on_file_missing']:
                         continue
                     r = salt_ret[e]
 
@@ -152,7 +165,7 @@ def audit(data_list, tags, labels, debug=False, **kwargs):
                         if r != '0':
                             r = r[1:]
                         allow_more_strict = False
-                        if 'allow_more_strict' in expected.keys():
+                        if 'allow_more_strict' in expected:
                             allow_more_strict = expected['allow_more_strict']
                         if not isinstance(allow_more_strict, bool):
                             passed = False
@@ -225,9 +238,7 @@ def _get_tags(data):
                 tags = tags_dict.get('*', [])
             if isinstance(tags, dict):
                 # malformed yaml, convert to list of dicts
-                tmp = []
-                for name, tag in tags.items():
-                    tmp.append({name: tag})
+                tmp = [{name: tag} for name, tag in tags.items()]
                 tags = tmp
             for item in tags:
                 for name, tag in item.items():
@@ -239,7 +250,7 @@ def _get_tags(data):
                     formatted_data = {'name': name,
                                       'tag': tag,
                                       'module': 'stat'}
-                    formatted_data.update(tag_data)
+                    formatted_data |= tag_data
                     formatted_data.update(audit_data)
                     formatted_data.pop('data')
                     ret[tag].append(formatted_data)

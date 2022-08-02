@@ -80,24 +80,28 @@ def run():
 def _clear_gitfs_locks():
     """ Clear old locks and log the changes """
     # Clear old locks
-    if 'gitfs' in __opts__['fileserver_backend'] or 'git' in __opts__['fileserver_backend']:
-        git_objects = [
-            hubblestack.utils.gitfs.GitFS(
-                __opts__,
-                __opts__['gitfs_remotes'],
-                per_remote_overrides=hubblestack.fileserver.gitfs.PER_REMOTE_OVERRIDES,
-                per_remote_only=hubblestack.fileserver.gitfs.PER_REMOTE_ONLY)]
-        ret = {}
-        for obj in git_objects:
-            lock_type = 'update'
-            cleared, errors = hubblestack.fileserver.clear_lock(obj.clear_lock, 'gitfs', remote=None,
-                                                         lock_type=lock_type)
-            if cleared:
-                ret.setdefault('cleared', []).extend(cleared)
-            if errors:
-                ret.setdefault('errors', []).extend(errors)
-        if ret:
-            log.info('One or more gitfs locks were removed: %s', ret)
+    if (
+        'gitfs' not in __opts__['fileserver_backend']
+        and 'git' not in __opts__['fileserver_backend']
+    ):
+        return
+    git_objects = [
+        hubblestack.utils.gitfs.GitFS(
+            __opts__,
+            __opts__['gitfs_remotes'],
+            per_remote_overrides=hubblestack.fileserver.gitfs.PER_REMOTE_OVERRIDES,
+            per_remote_only=hubblestack.fileserver.gitfs.PER_REMOTE_ONLY)]
+    ret = {}
+    lock_type = 'update'
+    for obj in git_objects:
+        cleared, errors = hubblestack.fileserver.clear_lock(obj.clear_lock, 'gitfs', remote=None,
+                                                     lock_type=lock_type)
+        if cleared:
+            ret.setdefault('cleared', []).extend(cleared)
+        if errors:
+            ret.setdefault('errors', []).extend(errors)
+    if ret:
+        log.info('One or more gitfs locks were removed: %s', ret)
 
 
 def _emit_and_refresh_grains():
@@ -196,8 +200,7 @@ def getsecondsbycronexpression(base, cron_exp):
     next_datetime = cron_iter.get_next(datetime)
     epoch_base_datetime = time.mktime(base.timetuple())
     epoch_datetime = time.mktime(next_datetime.timetuple())
-    seconds = int(epoch_datetime) - int(epoch_base_datetime)
-    return seconds
+    return int(epoch_datetime) - int(epoch_base_datetime)
 
 
 def getlastrunbycron(base, seconds):
@@ -210,8 +213,7 @@ def getlastrunbycron(base, seconds):
     current_time = time.time()
     while (epoch_datetime + seconds) < current_time:
         epoch_datetime = epoch_datetime + seconds
-    last_run = epoch_datetime
-    return last_run
+    return epoch_datetime
 
 
 def getlastrunbybuckets(buckets, seconds):
@@ -232,11 +234,11 @@ def getlastrunbybuckets(buckets, seconds):
     seconds_between_buckets = splay
     random_int = random.randint(0, splay - 1) if splay != 0 else 0
     bucket_execution_time = base_time + (seconds_between_buckets * bucket) + random_int
-    if bucket_execution_time < current_time:
-        last_run = bucket_execution_time
-    else:
-        last_run = bucket_execution_time - seconds
-    return last_run
+    return (
+        bucket_execution_time
+        if bucket_execution_time < current_time
+        else bucket_execution_time - seconds
+    )
 
 
 @HSS.watch
@@ -339,9 +341,7 @@ def schedule():
             returners = jobdata.get('returner', [])
             if not isinstance(returners, list):
                 returners = [returners]
-            # Actually process the job
-            run = _process_job(jobdata, splay, seconds, min_splay, base)
-            if run:
+            if run := _process_job(jobdata, splay, seconds, min_splay, base):
                 _execute_function(jobdata, func, returners, args, kwargs)
                 sf_count += 1
         except:
@@ -382,21 +382,20 @@ def _process_job(jobdata, splay, seconds, min_splay, base):
                 # Run now
                 run = True
                 jobdata['last_run'] = time.time()
+        elif splay:
+            # Run `seconds + splay` seconds in the future by telling the scheduler we last
+            # ran it at now + `splay` seconds.
+            jobdata['last_run'] = time.time() + random.randint(min_splay, splay)
+        elif 'buckets' in jobdata:
+            # Place the host in a bucket and fix the execution time.
+            jobdata['last_run'] = getlastrunbybuckets(jobdata['buckets'], seconds)
+            log.debug('last_run according to bucket is %s', jobdata['last_run'])
+        elif 'cron' in jobdata:
+            # execute the hubble process based on cron expression
+            jobdata['last_run'] = getlastrunbycron(base, seconds)
         else:
-            if splay:
-                # Run `seconds + splay` seconds in the future by telling the scheduler we last
-                # ran it at now + `splay` seconds.
-                jobdata['last_run'] = time.time() + random.randint(min_splay, splay)
-            elif 'buckets' in jobdata:
-                # Place the host in a bucket and fix the execution time.
-                jobdata['last_run'] = getlastrunbybuckets(jobdata['buckets'], seconds)
-                log.debug('last_run according to bucket is %s', jobdata['last_run'])
-            elif 'cron' in jobdata:
-                # execute the hubble process based on cron expression
-                jobdata['last_run'] = getlastrunbycron(base, seconds)
-            else:
-                # Run in `seconds` seconds.
-                jobdata['last_run'] = time.time()
+            # Run in `seconds` seconds.
+            jobdata['last_run'] = time.time()
     if jobdata['last_run'] < time.time() - seconds:
         run = True
 
@@ -439,11 +438,11 @@ def run_function():
     # TODO instantiate the salt outputter system?
     if __opts__['json_print']:
         print(json.dumps(ret))
+    elif __opts__['no_pprint']:
+        print(ret)
+
     else:
-        if not __opts__['no_pprint']:
-            pprint.pprint(ret)
-        else:
-            print(ret)
+        pprint.pprint(ret)
 
 
 def load_config(args=None):
@@ -560,17 +559,13 @@ def _setup_cached_uuid():
                 live_uuid = hubblestack.modules.cmdmod.run_stdout('{0} {1}'.format(path, query),
                                                            output_loglevel='quiet')
                 live_uuid = str(live_uuid).upper()
-                if len(live_uuid) == 36:
-                    return live_uuid
-                return None
+                return live_uuid if len(live_uuid) == 36 else None
         # If osquery isn't available, attempt to get uuid from /sys path (linux only)
         try:
             with open('/sys/devices/virtual/dmi/id/product_uuid', 'r') as product_uuid_file:
                 file_uuid = product_uuid_file.read()
             file_uuid = str(file_uuid).upper()
-            if len(file_uuid) == 36:
-                return file_uuid
-            return None
+            return file_uuid if len(file_uuid) == 36 else None
         except Exception:
             return None
 
@@ -657,7 +652,7 @@ def _setup_dirs():
     this_root_files = os.path.join(this_dir, 'files')
 
     if 'file_roots' not in __opts__:
-        __opts__['file_roots'] = dict(base=list())
+        __opts__['file_roots'] = dict(base=[])
 
     elif 'base' not in __opts__['file_roots']:
         __opts__['file_roots']['base'] = [ this_root_files ]
@@ -808,8 +803,11 @@ def emit_to_syslog(grains_to_emit):
         for grain in grains_to_emit:
             if grain in __grains__:
                 if bool(__grains__[grain]) and isinstance(__grains__[grain], dict):
-                    for key, value in __grains__[grain].items():
-                        syslog_list.append('{0}={1}'.format(key, value))
+                    syslog_list.extend(
+                        '{0}={1}'.format(key, value)
+                        for key, value in __grains__[grain].items()
+                    )
+
                 else:
                     syslog_list.append('{0}={1}'.format(grain, __grains__[grain]))
         syslog_message = ' '.join(syslog_list)
@@ -948,14 +946,12 @@ def kill_other_or_sys_exit(xpid, hname=r'hubble', ksig=signal.SIGTERM, kill_othe
                     " attempting to shutdown")
                 os.kill(int(xpid), ksig)
                 time.sleep(1)
-                if os.path.isdir("/proc/{pid}".format(pid=xpid)):
-                    log.error("fatal error: failed to shutdown process (pid=%s) successfully", xpid)
-                    sys.exit(1)
-                else:
+                if not os.path.isdir("/proc/{pid}".format(pid=xpid)):
                     return True
+                log.error("fatal error: failed to shutdown process (pid=%s) successfully", xpid)
             else:
                 log.error("refusing to run while another hubble instance is running")
-                sys.exit(1)
+            sys.exit(1)
     else:
         # pidfile present, but nothing at that pid. Did we receive a sigterm?
         log.warning(
@@ -993,19 +989,23 @@ def clean_up_process(received_signal, frame):
     pidfile and anything else that needs to be cleaned up.
     """
     if received_signal is None and frame is None:
-        if not __opts__.get('ignore_running', False):
-            if __opts__['daemonize']:
-                if os.path.isfile(__opts__['pidfile']):
-                    os.remove(__opts__['pidfile'])
+        if (
+            not __opts__.get('ignore_running', False)
+            and __opts__['daemonize']
+            and os.path.isfile(__opts__['pidfile'])
+        ):
+            os.remove(__opts__['pidfile'])
         sys.exit(0)
     try:
         if __mods__['config.get']('splunklogging', False):
             hubblestack.log.emit_to_splunk('Signal {0} detected'.format(received_signal),
                                            'INFO', 'hubblestack.signals')
     finally:
-        if received_signal == signal.SIGINT or received_signal == signal.SIGTERM:
-            if not __opts__.get('ignore_running', False):
-                if __opts__['daemonize']:
-                    if os.path.isfile(__opts__['pidfile']):
-                        os.remove(__opts__['pidfile'])
+        if received_signal in [signal.SIGINT, signal.SIGTERM]:
+            if (
+                not __opts__.get('ignore_running', False)
+                and __opts__['daemonize']
+                and os.path.isfile(__opts__['pidfile'])
+            ):
+                os.remove(__opts__['pidfile'])
             sys.exit(0)

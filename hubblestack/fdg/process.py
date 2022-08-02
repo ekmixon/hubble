@@ -38,9 +38,8 @@ def filter_dict(starting_dict=None, filter_values=False, update_chained=True,
         The status returned by the chained method.
     """
     try:
-        if update_chained:
-            if starting_dict:
-                chained.update(starting_dict)
+        if update_chained and starting_dict:
+            chained.update(starting_dict)
     except (AttributeError, TypeError, ValueError):
         log.error('Invalid argument type - dict required', exc_info=True)
         return False, None
@@ -200,13 +199,12 @@ def get_index(index=0, starting_list=None, extend_chained=True, chained=None, ch
         Status returned by the chained method.
 
     """
-    if extend_chained:
-        if starting_list:
-            try:
-                chained.extend(starting_list)
-            except (AttributeError, TypeError):
-                log.error("Invalid argument type", exc_info=True)
-                return False, None
+    if extend_chained and starting_list:
+        try:
+            chained.extend(starting_list)
+        except (AttributeError, TypeError):
+            log.error("Invalid argument type", exc_info=True)
+            return False, None
     try:
         ret = chained[index]
     except IndexError:
@@ -235,13 +233,12 @@ def get_key(key, starting_dict=None, update_chained=True, chained=None, chained_
     chained_status
         Status returned by the chained method.
     """
-    if update_chained:
-        if starting_dict:
-            try:
-                chained.update(starting_dict)
-            except (TypeError, ValueError):
-                log.error("Arguments should be of type dict.", exc_info=True)
-                return False, None
+    if update_chained and starting_dict:
+        try:
+            chained.update(starting_dict)
+        except (TypeError, ValueError):
+            log.error("Arguments should be of type dict.", exc_info=True)
+            return False, None
     try:
         ret = chained[key]
     except KeyError:
@@ -272,13 +269,12 @@ def join(words=None, sep='', extend_chained=True, chained=None, chained_status=N
     chained_status
         Status returned by the chained method.
     """
-    if extend_chained:
-        if words:
-            try:
-                chained.extend(words)
-            except (AttributeError, TypeError):
-                log.error("Arguments should be of type list.", exc_info=True)
-                return False, None
+    if extend_chained and words:
+        try:
+            chained.extend(words)
+        except (AttributeError, TypeError):
+            log.error("Arguments should be of type list.", exc_info=True)
+            return False, None
     try:
         ret = sep.join(chained)
     except (TypeError, AttributeError):
@@ -336,9 +332,7 @@ def _sort(seq,
     lexico
         Set to True if the sorting thould be in lexicographical order.
     """
-    key = None
-    if lexico:
-        key = str.lower
+    key = str.lower if lexico else None
     try:
         ret = sorted(seq, reverse=desc, key=key)
     except TypeError:
@@ -366,13 +360,12 @@ def split(phrase, sep=None, regex=False, format_chained=True, chained=None, chai
     chained_status
         Status returned by the chained method.
     """
-    if format_chained:
-        if chained:
-            try:
-                phrase = phrase.format(chained)
-            except AttributeError:
-                log.error("Invalid attributes type.", exc_info=True)
-                return False, None
+    if format_chained and chained:
+        try:
+            phrase = phrase.format(chained)
+        except AttributeError:
+            log.error("Invalid attributes type.", exc_info=True)
+            return False, None
     ret = _split(phrase, sep, regex)
     status = bool(ret) and len(ret) > 1
 
@@ -396,10 +389,7 @@ def _split(phrase,
         Set to True if ``sep`` should be treated as a regex instead of a delimiter.
     """
     try:
-        if regex:
-            ret = re.split(sep, phrase)
-        else:
-            ret = phrase.split(sep)
+        ret = re.split(sep, phrase) if regex else phrase.split(sep)
     except (AttributeError, TypeError):
         log.error("Invalid argument type.", exc_info=True)
         return None
@@ -421,14 +411,13 @@ def dict_to_list(starting_dict=None, update_chained=True, chained=None, chained_
     chained_status
         Status returned by the chained method.
     """
-    if update_chained:
-        if starting_dict:
-            try:
-                chained.update(starting_dict)
-            except (AttributeError, ValueError, TypeError):
-                log.error("Invalid arguments type.", exc_info=True)
-                return False, None
-    ret = [(key, value) for key, value in chained.items()]
+    if update_chained and starting_dict:
+        try:
+            chained.update(starting_dict)
+        except (AttributeError, ValueError, TypeError):
+            log.error("Invalid arguments type.", exc_info=True)
+            return False, None
+    ret = list(chained.items())
     status = bool(ret)
 
     return status, ret

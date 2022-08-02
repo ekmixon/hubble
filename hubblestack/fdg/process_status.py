@@ -171,10 +171,7 @@ def is_running(filter_sql, format_chained=True, chained=None, chained_status=Non
     if not res['data']:
         return False, False
     # the process is in the Running state
-    if str(res['data'][0]['state']) == 'R':
-        return True, True
-
-    return True, False
+    return (True, True) if str(res['data'][0]['state']) == 'R' else (True, False)
 
 
 def find_children(parent_filter, parent_field=None, returned_fields=None,

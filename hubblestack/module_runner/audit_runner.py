@@ -87,7 +87,7 @@ class AuditRunner(hubblestack.module_runner.runner.Runner):
         # Evaluate boolean expressions
         boolean_expr_result_list = self._evaluate_boolean_expression(
             boolean_expr_check_list, verbose, audit_profile, result_list)
-        result_list = result_list + boolean_expr_result_list
+        result_list += boolean_expr_result_list
 
         # return list of results for a file
         return result_list
@@ -219,11 +219,15 @@ class AuditRunner(hubblestack.module_runner.runner.Runner):
                 audit_result_local['check_result'] = CHECK_STATUS['Success']
             else:
                 audit_result_local['check_result'] = CHECK_STATUS['Failure']
-                audit_result_local['failure_reason'] = comparator_result if comparator_result else module_result_local[
-                    'error']
+                audit_result_local['failure_reason'] = (
+                    comparator_result or module_result_local['error']
+                )
+
                 module_failure_reason = self._get_module_failure_reason(audit_impl['module'], audit_id, audit_check)
-                failure_reasons.append(audit_result_local['failure_reason'])
-                failure_reasons.append(module_failure_reason)
+                failure_reasons.extend(
+                    (audit_result_local['failure_reason'], module_failure_reason)
+                )
+
             module_logs = {}
             if not verbose:
                 log.debug('Non verbose mode')
@@ -245,7 +249,10 @@ class AuditRunner(hubblestack.module_runner.runner.Runner):
 
         # Update overall check result based on invert result
         if invert_result:
-            log.debug("Inverting result for check: %s as invert_result is set to True" % audit_id)
+            log.debug(
+                f"Inverting result for check: {audit_id} as invert_result is set to True"
+            )
+
             overall_result = not overall_result
 
         if overall_result:
@@ -255,10 +262,9 @@ class AuditRunner(hubblestack.module_runner.runner.Runner):
             # fetch failure reason. If it is not present in profile, combine all individual checks reasons.
             if failure_reason:
                 audit_result['failure_reason'] = failure_reason
-            else:
-                if failure_reasons:
-                    failure_reasons = set(failure_reasons)
-                    audit_result['failure_reason'] = ', '.join(failure_reasons)
+            elif failure_reasons:
+                failure_reasons = set(failure_reasons)
+                audit_result['failure_reason'] = ', '.join(failure_reasons)
         return audit_result
 
     def _evaluate_boolean_expression(self, boolean_expr_check_list, verbose, audit_profile, result_list):

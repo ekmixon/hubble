@@ -73,29 +73,30 @@ class SplunkHandler(logging.Handler):
             fqdn = hubblestack.utils.stdrec.get_fqdn()
 
             event = {}
-            event.update(hubblestack.utils.stdrec.std_info())
+            event |= hubblestack.utils.stdrec.std_info()
 
             for custom_field in custom_fields:
-                custom_field_name = 'custom_' + custom_field
+                custom_field_name = f'custom_{custom_field}'
                 custom_field_value = __mods__['config.get'](custom_field, '')
                 if isinstance(custom_field_value, str):
-                    event.update({custom_field_name: custom_field_value})
+                    event[custom_field_name] = custom_field_value
                 elif isinstance(custom_field_value, list):
                     custom_field_value = ','.join(custom_field_value)
-                    event.update({custom_field_name: custom_field_value})
+                    event[custom_field_name] = custom_field_value
 
-            payload = {}
-            payload.update({'host': fqdn})
-            payload.update({'index': opts['index']})
-            payload.update({'sourcetype': opts['sourcetype']})
+            payload = {
+                'host': fqdn,
+                'index': opts['index'],
+                'sourcetype': opts['sourcetype'],
+            }
 
-            # Potentially add metadata fields:
-            fields = {}
-            for item in index_extracted_fields:
-                if item in event and not isinstance(event[item], (list, dict, tuple)):
-                    fields["meta_%s" % item] = str(event[item])
-            if fields:
-                payload.update({'fields': fields})
+            if fields := {
+                f"meta_{item}": str(event[item])
+                for item in index_extracted_fields
+                if item in event
+                and not isinstance(event[item], (list, dict, tuple))
+            }:
+                payload['fields'] = fields
 
             self.endpoint_list.append([hec, event, payload])
 

@@ -74,12 +74,8 @@ def _compare(result_to_compare, expected_string, args):
         (is_regex)
     """
 
-    # process is_regex
-    is_regex = args.get('is_regex', False)
-    if is_regex:
-        is_multiline = args.get('is_multiline', True)
-        if is_multiline:
-            return re.search(expected_string, result_to_compare, re.MULTILINE)
-        return re.search(expected_string, result_to_compare)
-    else:
+    if not (is_regex := args.get('is_regex', False)):
         return result_to_compare == expected_string
+    if is_multiline := args.get('is_multiline', True):
+        return re.search(expected_string, result_to_compare, re.MULTILINE)
+    return re.search(expected_string, result_to_compare)

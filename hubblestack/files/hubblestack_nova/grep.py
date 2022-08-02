@@ -147,14 +147,7 @@ def audit(data_list, tags, labels, debug=False, **kwargs):
                                              name,
                                              tag_data['pattern'])
                 if 'match_output' in tag_data:
-                    if not tag_data.get('match_output_regex'):
-                        if tag_data['match_output'] not in grep_ret:
-                            found = False
-                            failure_reason = "In file '{0}', could not find text pattern " \
-                                             "'{1}' in '{2}'".format(name,
-                                                                     tag_data['match_output'],
-                                                                     grep_ret)
-                    else:  # match with regex
+                    if tag_data.get('match_output_regex'):  # match with regex
                         if tag_data.get('match_output_multiline', True):
                             if not re.search(tag_data['match_output'], grep_ret, re.MULTILINE):
                                 found = False
@@ -163,15 +156,20 @@ def audit(data_list, tags, labels, debug=False, **kwargs):
                                                  .format(name,
                                                          tag_data['match_output'],
                                                          grep_ret)
-                        else:
-                            if not re.search(tag_data['match_output'], grep_ret):
-                                found = False
-                                failure_reason = "In file '{0}', could not find regex " \
-                                                 "pattern '{1}' in '{2}'" \
-                                                 .format(name,
-                                                         tag_data['match_output'],
-                                                         grep_ret)
+                        elif not re.search(tag_data['match_output'], grep_ret):
+                            found = False
+                            failure_reason = "In file '{0}', could not find regex " \
+                                             "pattern '{1}' in '{2}'" \
+                                             .format(name,
+                                                     tag_data['match_output'],
+                                                     grep_ret)
 
+                    elif tag_data['match_output'] not in grep_ret:
+                        found = False
+                        failure_reason = "In file '{0}', could not find text pattern " \
+                                         "'{1}' in '{2}'".format(name,
+                                                                 tag_data['match_output'],
+                                                                 grep_ret)
                 if not os.path.exists(name) and 'match_on_file_missing' in tag_data:
                     if tag_data['match_on_file_missing']:
                         found = True
@@ -182,20 +180,17 @@ def audit(data_list, tags, labels, debug=False, **kwargs):
                         failure_reason = "Could not find the required file '{0}'".format(name)
 
                 # Blacklisted pattern (must not be found)
-                if audittype == 'blacklist':
-                    if found:
-                        tag_data['failure_reason'] = failure_reason
-                        ret['Failure'].append(tag_data)
-                    else:
-                        ret['Success'].append(tag_data)
-
-                # Whitelisted pattern (must be found)
-                elif audittype == 'whitelist':
-                    if found:
-                        ret['Success'].append(tag_data)
-                    else:
-                        tag_data['failure_reason'] = failure_reason
-                        ret['Failure'].append(tag_data)
+                if (
+                    audittype == 'blacklist'
+                    and found
+                    or audittype != 'blacklist'
+                    and audittype == 'whitelist'
+                    and not found
+                ):
+                    tag_data['failure_reason'] = failure_reason
+                    ret['Failure'].append(tag_data)
+                elif audittype in ['blacklist', 'whitelist']:
+                    ret['Success'].append(tag_data)
 
     return ret
 
@@ -248,9 +243,7 @@ def _get_tags(data):
                 # grep:blacklist:0:telnet:data:Debian-8
                 if isinstance(tags, dict):
                     # malformed yaml, convert to list of dicts
-                    tmp = []
-                    for name, tag in tags.items():
-                        tmp.append({name: tag})
+                    tmp = [{name: tag} for name, tag in tags.items()]
                     tags = tmp
                 for item in tags:
                     for name, tag in item.items():
@@ -265,7 +258,7 @@ def _get_tags(data):
                                           'tag': tag,
                                           'module': 'grep',
                                           'type': toplist}
-                        formatted_data.update(tag_data)
+                        formatted_data |= tag_data
                         formatted_data.update(audit_data)
                         formatted_data.pop('data')
                         ret[tag].append(formatted_data)
@@ -313,10 +306,7 @@ def _grep(path,
     """
     path = os.path.expanduser(path)
 
-    if args:
-        options = ' '.join(args)
-    else:
-        options = ''
+    options = ' '.join(args) if args else ''
     cmd = (
         r'''grep  {options} {pattern} {path}'''
         .format(

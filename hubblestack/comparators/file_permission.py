@@ -45,9 +45,11 @@ def match(audit_id, result_to_compare, args):
     if given_permission != '0':
         given_permission = given_permission[1:]
 
-    ret_status = _check_mode(str(args['match']['required_value']), given_permission, allow_more_strict)
-
-    if ret_status:
+    if ret_status := _check_mode(
+        str(args['match']['required_value']),
+        given_permission,
+        allow_more_strict,
+    ):
         return True, "File permission check passed"
 
     error_msg = 'File permission check failed. allow_more_strict={0}, Expected={1}, Got={2}'.format(
@@ -76,12 +78,13 @@ def _check_mode(max_permission, given_permission, allow_more_strict):
     if not allow_more_strict or max_permission == 'None':
         return max_permission == given_permission
 
-    if (_is_permission_in_limit(max_permission[0], given_permission[0]) and
-            _is_permission_in_limit(max_permission[1], given_permission[1]) and
-            _is_permission_in_limit(max_permission[2], given_permission[2])):
-        return True
-
-    return False
+    return bool(
+        (
+            _is_permission_in_limit(max_permission[0], given_permission[0])
+            and _is_permission_in_limit(max_permission[1], given_permission[1])
+            and _is_permission_in_limit(max_permission[2], given_permission[2])
+        )
+    )
 
 
 def _is_permission_in_limit(max_permission, given_permission):
@@ -94,34 +97,22 @@ def _is_permission_in_limit(max_permission, given_permission):
     given_permission = int(given_permission)
     allowed_r = False
     allowed_w = False
-    allowed_x = False
     given_r = False
     given_w = False
-    given_x = False
-
     if max_permission >= 4:
         allowed_r = True
-        max_permission = max_permission - 4
+        max_permission -= 4
     if max_permission >= 2:
         allowed_w = True
-        max_permission = max_permission - 2
-    if max_permission >= 1:
-        allowed_x = True
-
+        max_permission -= 2
     if given_permission >= 4:
         given_r = True
-        given_permission = given_permission - 4
+        given_permission -= 4
     if given_permission >= 2:
         given_w = True
-        given_permission = given_permission - 2
-    if given_permission >= 1:
-        given_x = True
-
+        given_permission -= 2
+    given_x = given_permission >= 1
     if given_r and (not allowed_r):
         return False
-    if given_w and (not allowed_w):
-        return False
-    if given_x and (not allowed_x):
-        return False
-
-    return True
+    allowed_x = max_permission >= 1
+    return False if given_w and (not allowed_w) else not given_x or allowed_x

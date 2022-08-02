@@ -20,11 +20,9 @@ def hubble_build_metadata():
     """
     Add hubble build metadata to grains
     """
-    build_metadata = {}
     try:
         from hubblestack import __buildinfo__
     except ImportError:
         __buildinfo__ = {'build_metadata': 'NOT SET'}
-    build_metadata.update(__buildinfo__)
-
+    build_metadata = {} | __buildinfo__
     return {'buildinfo': build_metadata}

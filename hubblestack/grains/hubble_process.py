@@ -25,30 +25,21 @@ def _uid():
     '''
     Grain for the hubble User ID
     '''
-    if hubblestack.utils.platform.is_windows():
-        return None
-    return os.getuid()
+    return None if hubblestack.utils.platform.is_windows() else os.getuid()
 
 
 def _username():
     '''
     Grain for the hubble username
     '''
-    if pwd:
-        username = pwd.getpwuid(os.getuid()).pw_name
-    else:
-        username = getpass.getuser()
-
-    return username
+    return pwd.getpwuid(os.getuid()).pw_name if pwd else getpass.getuser()
 
 
 def _gid():
     '''
     Grain for the hubble Group ID
     '''
-    if hubblestack.utils.platform.is_windows():
-        return None
-    return os.getgid()
+    return None if hubblestack.utils.platform.is_windows() else os.getgid()
 
 
 def _groupname():

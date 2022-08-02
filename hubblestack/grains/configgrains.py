@@ -44,7 +44,8 @@ def configgrains():
     grains_to_make = __mods__['config.get']('config_to_grains', default=[])
     for grain in grains_to_make:
         for grain_key, grain_value in grain.items():
-            grain_value = __mods__['config.get'](grain_value, default=None)
-            if grain_value:
+            if grain_value := __mods__['config.get'](
+                grain_value, default=None
+            ):
                 grains[grain_key] = grain_value
     return grains

@@ -161,13 +161,10 @@ def run(audit_files=None,
             show_compliance = show_compliance.lower().strip() == 'true'
         if type(verbose) is str and verbose.lower().strip() in ['true', 'false']:
             verbose = verbose.lower().strip() == 'true'
-        elif type(verbose) is bool:
-            pass
-        else:
+        elif type(verbose) is not bool:
             verbose = None
-        if labels:
-            if not isinstance(labels, list):
-                labels = labels.split(',')
+        if labels and not isinstance(labels, list):
+            labels = labels.split(',')
         # validate and get list of filepaths
         audit_files = _get_audit_files(audit_files)
         if not audit_files:
@@ -187,7 +184,7 @@ def run(audit_files=None,
         _clean_up_results(result_dict)
         return result_dict
     except Exception as e:
-        log.error("Error while running audit run method: %s" % e)
+        log.error(f"Error while running audit run method: {e}")
         return None
 
 
@@ -208,8 +205,12 @@ def _get_audit_files(audit_files):
         audit_files = audit_files.split(',')
 
     # prepare paths
-    return ['salt://' + BASE_DIR_AUDIT_PROFILES + os.sep + audit_file.replace('.', os.sep) + '.yaml'
-            for audit_file in audit_files]
+    return [
+        f'salt://{BASE_DIR_AUDIT_PROFILES}{os.sep}'
+        + audit_file.replace('.', os.sep)
+        + '.yaml'
+        for audit_file in audit_files
+    ]
 
 
 def _evaluate_results(result_dict, combined_dict, show_compliance, verbose):
@@ -226,11 +227,7 @@ def _evaluate_results(result_dict, combined_dict, show_compliance, verbose):
         for result in result_list:
             sub_check = result.get('sub_check', False)
             if not sub_check:
-                dict = {}
-                if verbose:
-                    dict[result['tag']] = result
-                else:
-                    dict[result['tag']] = result['description']
+                dict = {result['tag']: result if verbose else result['description']}
                 if result['check_result'] == CHECK_STATUS['Success']:
                     result_dict[CHECK_STATUS['Success']].append(dict)
                 elif result['check_result'] == CHECK_STATUS['Failure']:
@@ -324,8 +321,7 @@ def top(topfile='top.audit',
             results[key].extend(val)
 
     if show_compliance:
-        compliance = _calculate_compliance(results)
-        if compliance:
+        if compliance := _calculate_compliance(results):
             results['Compliance'] = compliance
 
     _clean_up_results(results)
@@ -339,10 +335,7 @@ def _build_data_by_tag(topfile, tags, results):
     """
     data_by_tag = {}
 
-    # Get a list of yaml to run
-    top_data = _get_top_data(topfile)
-
-    if top_data:
+    if top_data := _get_top_data(topfile):
         for data in top_data:
             if isinstance(data, str):
                 if '*' not in data_by_tag:
@@ -369,7 +362,7 @@ def _get_top_data(topfile):
     """
     Helper method to retrieve and parse the Audit topfile
     """
-    topfile = 'salt://' + BASE_DIR_AUDIT_PROFILES + os.sep + topfile
+    topfile = f'salt://{BASE_DIR_AUDIT_PROFILES}{os.sep}{topfile}'
     log.debug('caching top file...')
     topfile_cache_path = __mods__['cp.cache_file'](topfile)
     if not topfile_cache_path:

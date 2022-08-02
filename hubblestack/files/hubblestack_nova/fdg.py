@@ -110,21 +110,16 @@ def audit(data_list, tags, labels, debug=False, **kwargs):
                 tag_data['fdg_result'] = fdg_result
                 tag_data['fdg_status'] = fdg_status
 
-                if use_status:
-                    check_value = fdg_status
+                check_value = fdg_status if use_status else fdg_result
+                if (
+                    true_for_success
+                    and check_value
+                    or not true_for_success
+                    and not check_value
+                ):
+                    ret['Success'].append(tag_data)
                 else:
-                    check_value = fdg_result
-
-                if true_for_success:
-                    if check_value:
-                        ret['Success'].append(tag_data)
-                    else:
-                        ret['Failure'].append(tag_data)
-                else:
-                    if check_value:
-                        ret['Failure'].append(tag_data)
-                    else:
-                        ret['Success'].append(tag_data)
+                    ret['Failure'].append(tag_data)
     return ret
 
 
@@ -142,7 +137,7 @@ def _get_consolidated_result(fdg_run, consolidation_operator):
     if not consolidation_operator:
         log.error("invalid value of consolidation operator %s found, returning False", consolidation_operator)
         return fdg_run, False
-    if consolidation_operator != "and" and consolidation_operator != "or":
+    if consolidation_operator not in ["and", "or"]:
         log.error("operator %s not supported, returning False", consolidation_operator)
         return fdg_run, False
 
@@ -205,7 +200,7 @@ def _get_tags(data):
             # fdg:0:id:data:Debian-8
             formatted_data = {'name': audit_id,
                               'module': 'fdg'}
-            formatted_data.update(tagged)
+            formatted_data |= tagged
             formatted_data.update(audit_data)
             formatted_data.pop('data')
             tag = formatted_data.get('tag')
@@ -226,11 +221,8 @@ def _apply_labels(__data__, labels):
         labelled_data = []
         for item in __data__['fdg']:
             if isinstance(item, dict) and item.get('labels'):
-                skip = False
-                for label in labels:
-                    if label not in item['labels']:
-                        skip = True
-                if skip is False:
+                skip = any(label not in item['labels'] for label in labels)
+                if not skip:
                     labelled_data.append(item)
         __data__['fdg'] = labelled_data
     return __data__

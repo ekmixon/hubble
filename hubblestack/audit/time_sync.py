@@ -229,12 +229,10 @@ def validate_params(block_id, block_dict, extra_args=None):
     """
     log.debug('Module: time_sync Start validating params for check-id: {0}'.format(block_id))
 
-    ntp_servers = _get_ntp_servers(block_id, block_dict, extra_args)
-
-    if not ntp_servers:
+    if ntp_servers := _get_ntp_servers(block_id, block_dict, extra_args):
+        log.debug('Validation success for check-id: {0}'.format(block_id))
+    else:
         raise HubbleCheckValidationError('No ntp_servers provided')
-
-    log.debug('Validation success for check-id: {0}'.format(block_id))
 
 
 def execute(block_id, block_dict, extra_args=None):
@@ -303,8 +301,9 @@ def _get_ntp_servers(block_id, block_dict, extra_args):
     ntp_servers = runner_utils.get_param_for_module(block_id, block_dict, 'ntp_servers')
     ntp_servers_chained = runner_utils.get_chained_param(extra_args)
 
-    extend_chained = runner_utils.get_param_for_module(block_id, block_dict, 'extend_chained', True)
-    if extend_chained:
+    if extend_chained := runner_utils.get_param_for_module(
+        block_id, block_dict, 'extend_chained', True
+    ):
         if ntp_servers:
             if ntp_servers_chained:
                 ntp_servers.extend(ntp_servers_chained)

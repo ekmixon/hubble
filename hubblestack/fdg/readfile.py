@@ -60,10 +60,7 @@ def json(path, subkey=None, sep=None, chained=None, chained_status=None):
         log.error('Error reading file %s.', path, exc_info=True)
 
     if subkey:
-        if sep is not None:
-            subkey = subkey.split(sep)
-        else:
-            subkey = [subkey]
+        subkey = subkey.split(sep) if sep is not None else [subkey]
         try:
             # Traverse dictionary
             for key in subkey:
@@ -119,10 +116,7 @@ def yaml(path, subkey=None, sep=None, chained=None, chained_status=None):
         log.error('Error reading file %s.', path, exc_info=True)
 
     if subkey:
-        if sep is not None:
-            subkey = subkey.split(sep)
-        else:
-            subkey = [subkey]
+        subkey = subkey.split(sep) if sep is not None else [subkey]
         try:
             # Traverse dictionary
             for key in subkey:
@@ -290,10 +284,9 @@ def _lines_as_dict(path, pattern, ignore_pattern, dictsep, valsep, subsep):
                 if key in found_keys and key not in processed_keys:
                     # Duplicate keys, make it a list of values underneath
                     # and add to list of values
-                    ret[key] = [ret[key]]
-                    ret[key].append(val)
+                    ret[key] = [ret[key], val]
                     processed_keys.add(key)
-                elif key in found_keys and key in processed_keys:
+                elif key in found_keys:
                     # Duplicate keys, add to list of values
                     ret[key].append(val)
                 else:
@@ -314,11 +307,8 @@ def _check_pattern(line, pattern, ignore_pattern):
     """
     keep = False
 
-    if pattern is None:
+    if pattern is None or pattern is not None and re.match(pattern, line):
         keep = True
-    elif re.match(pattern, line):
-        keep = True
-
     if ignore_pattern is not None and re.match(ignore_pattern, line):
         keep = False
 

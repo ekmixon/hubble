@@ -58,11 +58,7 @@ class FdgRunner(Runner):
             status, ret = hubblestack.module_runner.comparator.run(
                 block_id, block['comparator'], ret, status)
 
-        if 'return' in block:
-            returner = block['return']
-        else:
-            returner = None
-
+        returner = block['return'] if 'return' in block else None
         # get the result
         ret = ret if 'result' not in ret else ret['result']
 
@@ -97,9 +93,11 @@ class FdgRunner(Runner):
 
         The results will be returned as a list.
         """
-        ret = []
-        for value in chained:
-            ret.append(self._fdg_execute(block_id, block_data, value, chained_status))
+        ret = [
+            self._fdg_execute(block_id, block_data, value, chained_status)
+            for value in chained
+        ]
+
         if returner:
             self._return(ret, returner)
         return ret

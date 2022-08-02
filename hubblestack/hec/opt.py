@@ -33,7 +33,7 @@ MODALITIES = ('grains.get','config.get',) # search in grains first, fallback to 
 options_for_grains_config = {'token', 'index', 'port'}
 
 def _get_splunk_options(space, modality, **kw):
-    ret = list()
+    ret = []
 
     confg = __mods__['config.get']
 
@@ -77,27 +77,23 @@ def _get_splunk_options(space, modality, **kw):
     }
 
     nicknames = kw.pop('_nick', {'sourcetype_log': 'sourcetype'})
-    base_opts.update(kw)
+    base_opts |= kw
 
     req = [ k for k in base_opts if base_opts[k] is REQUIRED ]
 
-    sfr = __mods__[modality](space)
-
-    if sfr:
+    if sfr := __mods__[modality](space):
         if not isinstance(sfr, list):
             sfr = [sfr]
         for opt in sfr:
             final_opts = base_opts.copy()
             for k in opt:
                 j = nicknames.get(k, k)
-                if j in final_opts:
-                    # if j is one of the args that can be overridden and has been provided then do not update it
-                    if j in options_for_grains_config:
-                        if not confg("splunk_" + j, None):
-                            final_opts[j] = opt[k]
-                    else:
-                        final_opts[j] = opt[k]
-
+                if j in final_opts and (
+                    j in options_for_grains_config
+                    and not confg(f"splunk_{j}", None)
+                    or j not in options_for_grains_config
+                ):
+                    final_opts[j] = opt[k]
             if REQUIRED in final_opts.values():
                 raise Exception('{0} must be specified in the {1} configs!'.format(req, space))
             ret.append(final_opts)
@@ -152,8 +148,9 @@ def get_splunk_options(*spaces, **kw):
 
     for space in spaces:
         for modality in MODALITIES:
-            ret = _get_splunk_options(space, modality, **copy.deepcopy(kw))
-            if ret:
+            if ret := _get_splunk_options(
+                space, modality, **copy.deepcopy(kw)
+            ):
                 return ret
 
     return []

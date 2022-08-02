@@ -5,6 +5,7 @@ directories for python loadable code and organizes the code into the
 plugin interfaces used by Salt.
 '''
 
+
 import os
 import re
 import sys
@@ -57,13 +58,21 @@ MODULE_KIND_SOURCE = 1
 MODULE_KIND_COMPILED = 2
 MODULE_KIND_EXTENSION = 3
 MODULE_KIND_PKG_DIRECTORY = 5
-SUFFIXES = []
-for suffix in importlib.machinery.EXTENSION_SUFFIXES:
-    SUFFIXES.append((suffix, 'rb', MODULE_KIND_EXTENSION))
-for suffix in importlib.machinery.SOURCE_SUFFIXES:
-    SUFFIXES.append((suffix, 'rb', MODULE_KIND_SOURCE))
-for suffix in importlib.machinery.BYTECODE_SUFFIXES:
-    SUFFIXES.append((suffix, 'rb', MODULE_KIND_COMPILED))
+SUFFIXES = [
+    (suffix, 'rb', MODULE_KIND_EXTENSION)
+    for suffix in importlib.machinery.EXTENSION_SUFFIXES
+]
+
+SUFFIXES.extend(
+    (suffix, 'rb', MODULE_KIND_SOURCE)
+    for suffix in importlib.machinery.SOURCE_SUFFIXES
+)
+
+SUFFIXES.extend(
+    (suffix, 'rb', MODULE_KIND_COMPILED)
+    for suffix in importlib.machinery.BYTECODE_SUFFIXES
+)
+
 MODULE_KIND_MAP = {
     MODULE_KIND_SOURCE: importlib.machinery.SourceFileLoader,
     MODULE_KIND_COMPILED: importlib.machinery.SourcelessFileLoader,
@@ -76,7 +85,7 @@ PY3_PRE_EXT = \
 # Will be set to pyximport module at runtime if cython is enabled in config.
 pyximport = None
 
-PRESERVABLE_OPTS = dict()
+PRESERVABLE_OPTS = {}
 
 def set_preservable_opts(opts):
     '''
@@ -138,8 +147,7 @@ def _module_dirs(
         for entry_point in pkg_resources.iter_entry_points('hubble.loader', ext_type_dirs):
             try:
                 loaded_entry_point = entry_point.load()
-                for path in loaded_entry_point():
-                    ext_type_types.append(path)
+                ext_type_types.extend(iter(loaded_entry_point()))
             except Exception as exc:
                 log.error("Error getting module directories from %s: %s", _format_entrypoint_target(entry_point), exc)
                 log.debug("Full backtrace for module directories error", exc_info=True)
@@ -322,10 +330,12 @@ def grains(opts, force_refresh=False, proxy=None):
     grains_deep_merge = opts.get('grains_deep_merge', False) is True
     if 'conf_file' in opts:
         pre_opts = {}
-        pre_opts.update(hubblestack.config.load_config(
-            opts['conf_file'], 'HUBBLE_CONFIG',
-            hubblestack.config.DEFAULT_OPTS['conf_file']
-        ))
+        pre_opts |= hubblestack.config.load_config(
+            opts['conf_file'],
+            'HUBBLE_CONFIG',
+            hubblestack.config.DEFAULT_OPTS['conf_file'],
+        )
+
         default_include = pre_opts.get(
             'default_include', opts['default_include']
         )
@@ -336,10 +346,7 @@ def grains(opts, force_refresh=False, proxy=None):
         pre_opts.update(hubblestack.config.include_config(
             include, opts['conf_file'], verbose=True
         ))
-        if 'grains' in pre_opts:
-            opts['grains'] = pre_opts['grains']
-        else:
-            opts['grains'] = {}
+        opts['grains'] = pre_opts.get('grains', {})
     else:
         opts['grains'] = {}
 
@@ -358,7 +365,7 @@ def grains(opts, force_refresh=False, proxy=None):
         if grains_deep_merge:
             hubblestack.utils.dictupdate.update(grains_data, ret)
         else:
-            grains_data.update(ret)
+            grains_data |= ret
 
     # Run the rest of the grains
     for key in funcs:
@@ -464,9 +471,7 @@ def _generate_module(name):
 
 
 def _mod_type(module_path):
-    if module_path.startswith(HUBBLE_BASE_PATH):
-        return 'int'
-    return 'ext'
+    return 'int' if module_path.startswith(HUBBLE_BASE_PATH) else 'ext'
 
 
 class LazyLoader(hubblestack.utils.lazy.LazyDict):
@@ -519,7 +524,7 @@ class LazyLoader(hubblestack.utils.lazy.LazyDict):
                  xlate_funcnames=None,
                  proxy=None,
                  virtual_funcs=None,
-                 ):  # pylint: disable=W0231
+                 ):    # pylint: disable=W0231
         '''
         In pack, if any of the values are None they will be replaced with an
         empty context-specific dict
@@ -557,7 +562,7 @@ class LazyLoader(hubblestack.utils.lazy.LazyDict):
         self.missing_modules = {}  # mapping of name -> error
         self.loaded_modules = {}  # mapping of module_name -> dict_of_functions
         self.loaded_files = set()  # TODO: just remove them from file_mapping?
-        self.static_modules = static_modules if static_modules else []
+        self.static_modules = static_modules or []
 
         if virtual_funcs is None:
             virtual_funcs = []
@@ -635,16 +640,16 @@ class LazyLoader(hubblestack.utils.lazy.LazyDict):
         mod_name = function_name.split('.')[0]
         if mod_name in self.loaded_modules:
             return '\'{0}\' is not available.'.format(function_name)
+        try:
+            reason = self.missing_modules[mod_name]
+        except KeyError:
+            return '\'{0}\' is not available.'.format(function_name)
         else:
-            try:
-                reason = self.missing_modules[mod_name]
-            except KeyError:
-                return '\'{0}\' is not available.'.format(function_name)
-            else:
-                if reason is not None:
-                    return '\'{0}\' __virtual__ returned False: {1}'.format(mod_name, reason)
-                else:
-                    return '\'{0}\' __virtual__ returned False'.format(mod_name)
+            return (
+                '\'{0}\' __virtual__ returned False: {1}'.format(mod_name, reason)
+                if reason is not None
+                else '\'{0}\' __virtual__ returned False'.format(mod_name)
+            )
 
     def _refresh_file_mapping(self):
         '''
@@ -749,7 +754,7 @@ class LazyLoader(hubblestack.utils.lazy.LazyDict):
                         # is there something __init__?
                         subfiles = os.listdir(fpath)
                         for suffix in self.suffix_order:
-                            if '' == suffix:
+                            if suffix == '':
                                 continue  # Next suffix (__init__ must have a suffix)
                             init_file = '__init__{0}'.format(suffix)
                             if init_file in subfiles:
@@ -770,12 +775,14 @@ class LazyLoader(hubblestack.utils.lazy.LazyDict):
                                 self.file_mapping[f_noext][0]
                             )
 
-                        if ext == '.pyc' and curr_ext == '.pyc':
-                            # Check the optimization level
-                            if opt_index >= curr_opt_index:
-                                # Module name match, but a higher-priority
-                                # optimization level was already matched, skipping.
-                                continue
+                        if (
+                            ext == '.pyc'
+                            and curr_ext == '.pyc'
+                            and opt_index >= curr_opt_index
+                        ):
+                            # Module name match, but a higher-priority
+                            # optimization level was already matched, skipping.
+                            continue
 
                     if not dirname and ext == '.pyc':
                         # On Python 3, we should only load .pyc files from the
@@ -857,7 +864,7 @@ class LazyLoader(hubblestack.utils.lazy.LazyDict):
         # reload only custom "sub"modules
         for submodule in submodules:
             # it is a submodule if the name is in a namespace under mod
-            if submodule.__name__.startswith(mod.__name__ + '.'):
+            if submodule.__name__.startswith(f'{mod.__name__}.'):
                 reload_module(submodule)
                 self._reload_submodules(submodule)
 

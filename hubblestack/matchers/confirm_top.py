@@ -21,14 +21,12 @@ def confirm_top(match, data, nodegroups=None):
         log.error("Received bad data when setting the match from the top " "file")
         return False
     for item in data:
-        if isinstance(item, dict):
-            if "match" in item:
-                matcher = item["match"]
+        if isinstance(item, dict) and "match" in item:
+            matcher = item["match"]
 
     matchers = hubblestack.loader.matchers(__opts__)
-    funcname = matcher + "_match.match"
+    funcname = f"{matcher}_match.match"
     if matcher == "nodegroup":
         return matchers[funcname](match, nodegroups)
-    else:
-        m = matchers[funcname]
-        return m(match)
+    m = matchers[funcname]
+    return m(match)

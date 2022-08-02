@@ -254,11 +254,12 @@ def validate_params(block_id, block_dict, extra_args=None):
     if not function_name:
         function_name = 'GET'
 
-    chain_error = {}
-    chained_result = runner_utils.get_chained_param(extra_args)
-    if chained_result:
+    if chained_result := runner_utils.get_chained_param(extra_args):
         log.warning("Chained params are not supported in curl Module.")
-        chain_error['chained_params'] = "Chained params found in CURL module, returning with error"
+        chain_error = {
+            'chained_params': "Chained params found in CURL module, returning with error"
+        }
+
         raise HubbleCheckValidationError(chain_error)
 
     url = runner_utils.get_param_for_module(block_id, block_dict, 'url')
@@ -292,8 +293,7 @@ def execute(block_id, block_dict, extra_args=None):
     """
     log.debug('Executing Curl module for id: {0}'.format(block_id))
 
-    chained_param = runner_utils.get_chained_param(extra_args)
-    if chained_param:
+    if chained_param := runner_utils.get_chained_param(extra_args):
         log.warn('Chained value detected in curl.request module. Chained '
                  'values are unsupported in the curl module.')
 
@@ -304,21 +304,23 @@ def execute(block_id, block_dict, extra_args=None):
     if not function_name:
         function_name = 'GET'
 
-    params = runner_utils.get_param_for_module(block_id, block_dict, 'params')
-    if params:
+    if params := runner_utils.get_param_for_module(
+        block_id, block_dict, 'params'
+    ):
         kwargs['params'] = params
-    data = runner_utils.get_param_for_module(block_id, block_dict, 'data')
-    if data:
+    if data := runner_utils.get_param_for_module(block_id, block_dict, 'data'):
         kwargs['data'] = data
     username = runner_utils.get_param_for_module(block_id, block_dict, 'username')
     password = runner_utils.get_param_for_module(block_id, block_dict, 'password')
     if username:
         kwargs['auth'] = (username, password)
-    verify = runner_utils.get_param_for_module(block_id, block_dict, 'verify')
-    if verify:
+    if verify := runner_utils.get_param_for_module(
+        block_id, block_dict, 'verify'
+    ):
         kwargs['verify'] = verify
-    headers = runner_utils.get_param_for_module(block_id, block_dict, 'headers')
-    if headers:
+    if headers := runner_utils.get_param_for_module(
+        block_id, block_dict, 'headers'
+    ):
         kwargs['headers'] = headers
     timeout = runner_utils.get_param_for_module(block_id, block_dict, 'timeout')
     if not timeout:

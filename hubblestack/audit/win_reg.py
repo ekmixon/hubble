@@ -208,9 +208,11 @@ log = logging.getLogger(__name__)
 
 
 def __virtual__():
-    if not hubblestack.utils.platform.is_windows():
-        return False, "This audit module only runs on windows"
-    return True
+    return (
+        True
+        if hubblestack.utils.platform.is_windows()
+        else (False, "This audit module only runs on windows")
+    )
 
 
 def execute(block_id, block_dict, extra_args=None):
@@ -231,8 +233,7 @@ def execute(block_id, block_dict, extra_args=None):
     """
     log.debug("Executing win_reg module for id: {0}".format(block_id))
 
-    chained_result = runner_utils.get_chained_param(extra_args)
-    if chained_result:
+    if chained_result := runner_utils.get_chained_param(extra_args):
         reg_name = chained_result.get("name")
     else:
         reg_name = runner_utils.get_param_for_module(block_id, block_dict, "name")
@@ -272,13 +273,12 @@ def validate_params(block_id, block_dict, extra_args=None):
     # fetch required param
     chained_pkg_name = None
     reg_name = None
-    chained_result = runner_utils.get_chained_param(extra_args)
-    if chained_result:
+    if chained_result := runner_utils.get_chained_param(extra_args):
         chained_pkg_name = chained_result.get("name")
     else:
         reg_name = runner_utils.get_param_for_module(block_id, block_dict, "name")
     if not chained_pkg_name and not reg_name:
-        error["name"] = "Mandatory parameter: name not found for id: %s" % block_id
+        error["name"] = f"Mandatory parameter: name not found for id: {block_id}"
     if error:
         raise HubbleCheckValidationError(error)
 
@@ -300,9 +300,7 @@ def get_filtered_params_to_log(block_id, block_dict, extra_args=None):
     """
     log.debug("get_filtered_params_to_log for win_reg and id: {0}".format(block_id))
 
-    # fetch required param
-    chained_result = runner_utils.get_chained_param(extra_args)
-    if chained_result:
+    if chained_result := runner_utils.get_chained_param(extra_args):
         reg_name = chained_result
     else:
         reg_name = runner_utils.get_param_for_module(block_id, block_dict, "name")
@@ -315,7 +313,7 @@ def _reg_path_splitter(reg_path):
     dict_return["hive"], temp = reg_path.split("\\", 1)
     if "\\\\*\\" in temp:
         dict_return["key"], dict_return["value"] = temp.rsplit("\\\\", 1)
-        dict_return["value"] = "\\\\{}".format(dict_return["value"])
+        dict_return["value"] = f'\\\\{dict_return["value"]}'
     else:
         dict_return["key"], dict_return["value"] = temp.rsplit("\\", 1)
 
@@ -327,32 +325,27 @@ def _find_option_value_in_reg(reg_hive, reg_key, reg_value):
     helper function to retrieve Windows registry settings for a particular
     option
     """
-    if reg_hive.lower() in ("hku", "hkey_users"):
-        key_list = []
-        ret_dict = {}
-        sid_return = __mods__["cmd.run"]("reg query hku").split("\n")
-        for line in sid_return:
-            if "\\" in line:
-                key_list.append(line.split("\\")[1].strip())
-        for sid in key_list:
-            if len(sid) <= 15 or "_Classes" in sid:
-                continue
-            temp_reg_key = reg_key.replace("<SID>", sid)
-            ret_dict[sid] = _read_reg_value(reg_hive, temp_reg_key, reg_value)
-        return ret_dict
-    else:
+    if reg_hive.lower() not in ("hku", "hkey_users"):
         return _read_reg_value(reg_hive, reg_key, reg_value)
+    ret_dict = {}
+    sid_return = __mods__["cmd.run"]("reg query hku").split("\n")
+    key_list = [line.split("\\")[1].strip() for line in sid_return if "\\" in line]
+    for sid in key_list:
+        if len(sid) <= 15 or "_Classes" in sid:
+            continue
+        temp_reg_key = reg_key.replace("<SID>", sid)
+        ret_dict[sid] = _read_reg_value(reg_hive, temp_reg_key, reg_value)
+    return ret_dict
 
 
 def _read_reg_value(reg_hive, reg_key, reg_value):
     reg_result = __mods__["reg.read_value"](reg_hive, reg_key, reg_value)
-    if reg_result.get("success"):
-        if reg_result.get("vdata") == "(value not set)":
-            return False
-        else:
-            return reg_result.get("vdata")
-    else:
+    if not reg_result.get("success"):
         return False
+    if reg_result.get("vdata") == "(value not set)":
+        return False
+    else:
+        return reg_result.get("vdata")
 
 
 def get_failure_reason(block_id, block_dict, extra_args=None):

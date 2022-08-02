@@ -78,12 +78,11 @@ def match(audit_id, result_to_match, args):
 
     error = {}
     for key in args.get('match').keys():
-        if key not in validity_params_list:
-            if result_to_match.get(key) != args.get('match').get(key):
-                message = 'Value of input field: {0} does not match. Expected value: {1}, Actual value: {2}'.format(key, args.get('match').get(key), result_to_match.get(key))
-                log.debug(message)
-                error[key] = message
+        if key not in validity_params_list and result_to_match.get(
+            key
+        ) != args.get('match').get(key):
+            message = 'Value of input field: {0} does not match. Expected value: {1}, Actual value: {2}'.format(key, args.get('match').get(key), result_to_match.get(key))
+            log.debug(message)
+            error[key] = message
 
-    if error:
-        return False, error
-    return True, 'certificate_validation_passed'
+    return (False, error) if error else (True, 'certificate_validation_passed')

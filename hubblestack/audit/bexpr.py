@@ -203,7 +203,7 @@ def validate_params(block_id, block_dict, extra_args=None):
     # fetch required param
     expr = runner_utils.get_param_for_module(block_id, block_dict, 'expr')
     if not expr:
-        error['expr'] = 'Mandatory parameter: expr not found for id: %s' % block_id
+        error['expr'] = f'Mandatory parameter: expr not found for id: {block_id}'
 
     if error:
         raise HubbleCheckValidationError(error)
@@ -229,7 +229,7 @@ def execute(block_id, block_dict, extra_args=None):
     returns:
         tuple of result(value) and status(boolean)
     """
-    log.debug('Executing bexpr module for check-id: %s' % block_id)
+    log.debug(f'Executing bexpr module for check-id: {block_id}')
     result_list = extra_args.get('extra_args')
     keyword_list = ['AND', 'OR', 'NOT', '(', ')']
     operand_list = ['AND', 'OR', 'NOT']
@@ -254,11 +254,16 @@ def execute(block_id, block_dict, extra_args=None):
     # Fetch the result of check from result list and store the result of referenced checks
     # In case a check is not present in result list or referred check result is not Success or Failure, raise an Error
     error = {}
-    if len(referred_checks_list) == 0:
-        error[block_id] = "No checks are referred in the boolean expression: %s" % original_expression
+    if not referred_checks_list:
+        error[
+            block_id
+        ] = f"No checks are referred in the boolean expression: {original_expression}"
+
     if len(referred_checks_list) > 1 and operand_present == 0:
         error[
-            block_id] = "No operand is present for multiple referred checks in boolean expression: %s" % original_expression
+            block_id
+        ] = f"No operand is present for multiple referred checks in boolean expression: {original_expression}"
+
 
     if error:
         raise HubbleCheckValidationError(error)
@@ -269,19 +274,22 @@ def execute(block_id, block_dict, extra_args=None):
             if result.get('check_unique_id', '') == referred_check_id:
                 check_found = True
                 check_result = result.get('check_result', '')
-                if check_result == "Success":
-                    referred_checks_result[referred_check_id] = "True"
-                elif check_result == "Failure":
+                if check_result == "Failure":
                     referred_checks_result[referred_check_id] = "False"
+                elif check_result == "Success":
+                    referred_checks_result[referred_check_id] = "True"
                 else:
                     error[
-                        block_id] = "Referred check: %s result is %s. Setting boolean expression check result to error." % (
-                        referred_check_id, check_result)
+                        block_id
+                    ] = f"Referred check: {referred_check_id} result is {check_result}. Setting boolean expression check result to error."
+
                 break
 
     if not check_found:
-        error[block_id] = "Referred check: %s is not available. Please verify correct check is referred." % (
-            referred_check_id)
+        error[
+            block_id
+        ] = f"Referred check: {referred_check_id} is not available. Please verify correct check is referred."
+
     if error:
         raise HubbleCheckValidationError(error)
 
@@ -289,7 +297,9 @@ def execute(block_id, block_dict, extra_args=None):
         check_result = _evaluate_expression(expr_list, keyword_list, referred_checks_result)
     except Exception as e:
         error[
-            block_id] = "Error in evaluating boolean expression: %s Please verify the expression" % original_expression
+            block_id
+        ] = f"Error in evaluating boolean expression: {original_expression} Please verify the expression"
+
         raise HubbleCheckValidationError(error)
 
     if not bool(check_result):
@@ -391,11 +401,11 @@ class BoolOperand:
 
 class BoolBinOp:
     def __init__(self, t):
-        self.args = t[0][0::2]
+        self.args = t[0][::2]
 
     def __str__(self):
-        sep = " %s " % self.reprsymbol
-        return "(" + sep.join(map(str, self.args)) + ")"
+        sep = f" {self.reprsymbol} "
+        return f"({sep.join(map(str, self.args))})"
 
     def __bool__(self):
         return self.evalop(bool(a) for a in self.args)
@@ -422,6 +432,6 @@ class BoolNot:
         return not v
 
     def __str__(self):
-        return "NOT " + str(self.arg)
+        return f"NOT {str(self.arg)}"
 
     __repr__ = __str__

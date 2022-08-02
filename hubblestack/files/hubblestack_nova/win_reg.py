@@ -20,9 +20,11 @@ __virtualname__ = 'win_reg'
 
 
 def __virtual__():
-    if not hubblestack.utils.platform.is_windows():
-        return False, 'This audit module only runs on windows'
-    return True
+    return (
+        True
+        if hubblestack.utils.platform.is_windows()
+        else (False, 'This audit module only runs on windows')
+    )
 
 def apply_labels(__data__, labels):
     """
@@ -87,8 +89,9 @@ def audit(data_list, tags, labels, debug=False, **kwargs):
 
                 # Blacklisted audit (do not include)
                 if 'blacklist' in audit_type:
-                    secret = _find_option_value_in_reg(reg_dict['hive'], reg_dict['key'], reg_dict['value'])
-                    if secret:
+                    if secret := _find_option_value_in_reg(
+                        reg_dict['hive'], reg_dict['key'], reg_dict['value']
+                    ):
                         tag_data['failure_reason'] = "Value of blacklisted registry key '{0}:{1}:{2}' " \
                                                      "is set to value '{3}'. It should not be configured." \
                                                      .format(reg_dict['hive'],
@@ -107,9 +110,14 @@ def audit(data_list, tags, labels, debug=False, **kwargs):
                         if any(x is False for x in current.values()):
                             ret['Failure'].append(tag_data)
                         else:
-                            answer_list = []
-                            for item in current:
-                                answer_list.append(_translate_value_type(current[item], tag_data['value_type'], match_output))
+                            answer_list = [
+                                _translate_value_type(
+                                    current[item],
+                                    tag_data['value_type'],
+                                    match_output,
+                                )
+                                for item in current
+                            ]
 
                             if False in answer_list:
                                 tag_data['failure_reason'] = "Value of registry key '{0}:{1}:{2}' should" \
@@ -124,34 +132,33 @@ def audit(data_list, tags, labels, debug=False, **kwargs):
                                 ret['Failure'].append(tag_data)
                             else:
                                 ret['Success'].append(tag_data)
-                    else:
-                        if current is not False:
-                            secret = _translate_value_type(current, tag_data['value_type'], match_output)
-                            if secret:
-                                tag_data['value_found'] = current
-                                ret['Success'].append(tag_data)
-                            else:
-                                tag_data['failure_reason'] = "Value of registry key '{0}:{1}:{2}' is set to " \
-                                                             "value '{3}'. It should be set to '{4}({5})'." \
-                                                             .format(reg_dict['hive'],
-                                                                     reg_dict['key'],
-                                                                     reg_dict['value'],
-                                                                     current,
-                                                                     match_output,
-                                                                     tag_data['value_type'])
-                                tag_data['value_found'] = current
-                                ret['Failure'].append(tag_data)
+                    elif current is False:
+                        tag_data['value_found'] = None
+                        tag_data['failure_reason'] = "Value of registry key '{0}:{1}:{2}' could not be " \
+                                                     "found. It should be set to '{3}({4})'." \
+                                                     .format(reg_dict['hive'],
+                                                             reg_dict['key'],
+                                                             reg_dict['value'],
+                                                             match_output,
+                                                             tag_data['value_type'])
+                        ret['Failure'].append(tag_data)
 
-                        else:
-                            tag_data['value_found'] = None
-                            tag_data['failure_reason'] = "Value of registry key '{0}:{1}:{2}' could not be " \
-                                                         "found. It should be set to '{3}({4})'." \
-                                                         .format(reg_dict['hive'],
-                                                                 reg_dict['key'],
-                                                                 reg_dict['value'],
-                                                                 match_output,
-                                                                 tag_data['value_type'])
-                            ret['Failure'].append(tag_data)
+                    elif secret := _translate_value_type(
+                        current, tag_data['value_type'], match_output
+                    ):
+                        tag_data['value_found'] = current
+                        ret['Success'].append(tag_data)
+                    else:
+                        tag_data['failure_reason'] = "Value of registry key '{0}:{1}:{2}' is set to " \
+                                                     "value '{3}'. It should be set to '{4}({5})'." \
+                                                     .format(reg_dict['hive'],
+                                                             reg_dict['key'],
+                                                             reg_dict['value'],
+                                                             current,
+                                                             match_output,
+                                                             tag_data['value_type'])
+                        tag_data['value_found'] = current
+                        ret['Failure'].append(tag_data)
 
     return ret
 
@@ -204,9 +211,7 @@ def _get_tags(data):
                 # secedit:whitelist:PasswordComplexity:data:Windows 2012
                 if isinstance(tags, dict):
                     # malformed yaml, convert to list of dicts
-                    tmp = []
-                    for name, tag in tags.items():
-                        tmp.append({name: tag})
+                    tmp = [{name: tag} for name, tag in tags.items()]
                     tags = tmp
                 for item in tags:
                     for name, tag in item.items():
@@ -221,7 +226,7 @@ def _get_tags(data):
                                           'tag': tag,
                                           'module': 'win_reg',
                                           'type': toplist}
-                        formatted_data.update(tag_data)
+                        formatted_data |= tag_data
                         formatted_data.update(audit_data)
                         formatted_data.pop('data')
                         ret[tag].append(formatted_data)
@@ -233,7 +238,7 @@ def _reg_path_splitter(reg_path):
     dict_return['hive'], temp = reg_path.split('\\', 1)
     if '\\\\*\\' in temp:
         dict_return['key'], dict_return['value'] = temp.rsplit('\\\\', 1)
-        dict_return['value'] = '\\\\{}'.format(dict_return['value'])
+        dict_return['value'] = f"\\\\{dict_return['value']}"
     else:
         dict_return['key'], dict_return['value'] = temp.rsplit('\\', 1)
 
@@ -246,35 +251,34 @@ def _find_option_value_in_reg(reg_hive, reg_key, reg_value):
     option
     """
     if reg_hive.lower() in ('hku', 'hkey_users'):
-        key_list = []
         ret_dict = {}
         sid_return = __mods__['cmd.run']('reg query hku').split('\n')
-        for line in sid_return:
-            if '\\' in line:
-                key_list.append(line.split('\\')[1].strip())
+        key_list = [line.split('\\')[1].strip() for line in sid_return if '\\' in line]
         for sid in key_list:
             if len(sid) <= 15 or '_Classes' in sid:
                 continue
             temp_reg_key = reg_key.replace('<SID>', sid)
             reg_result = __mods__['reg.read_value'](reg_hive, temp_reg_key, reg_value)
-            if reg_result['success']:
-                if reg_result['vdata'] == '(value not set)':
-                    ret_dict[sid] = False
-                else:
-                    ret_dict[sid] = reg_result['vdata']
-            else:
+            if (
+                reg_result['success']
+                and reg_result['vdata'] == '(value not set)'
+                or not reg_result['success']
+            ):
                 ret_dict[sid] = False
+            else:
+                ret_dict[sid] = reg_result['vdata']
         return ret_dict
 
     else:
         reg_result = __mods__['reg.read_value'](reg_hive, reg_key, reg_value)
-        if reg_result['success']:
-            if reg_result['vdata'] == '(value not set)':
-                return False
-            else:
-                return reg_result['vdata']
-        else:
+        if (
+            reg_result['success']
+            and reg_result['vdata'] == '(value not set)'
+            or not reg_result['success']
+        ):
             return False
+        else:
+            return reg_result['vdata']
 
 
 def _translate_value_type(current, value, evaluator):
@@ -284,22 +288,11 @@ def _translate_value_type(current, value, evaluator):
         log.debug('registry value is a string')
         current = current.lower()
     if 'equal' in value:
-        if current == evaluator:
-            return True
-        else:
-            return False
-    if 'domain' in value:
-        pass
+        return current == evaluator
     if 'more' in value:
-        if current >= evaluator:
-            return True
-        else:
-            return False
+        return current >= evaluator
     if 'less' in value:
-        if current <= evaluator and current != 0:
-            return True
-        else:
-            return False
+        return current <= evaluator and current != 0
     if 'user' in value:
         log.debug("HKEY_Users is still a work in progress")
         return True
@@ -309,7 +302,4 @@ def _is_domain_controller():
     ret = __mods__['reg.read_value'](hive="HKLM",
                                      key=r"SYSTEM\CurrentControlSet\Control\ProductOptions",
                                      vname="ProductType")
-    if ret['vdata'] == "LanmanNT":
-        return True
-    else:
-        return False
+    return ret['vdata'] == "LanmanNT"

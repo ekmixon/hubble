@@ -250,7 +250,7 @@ def run_stdout(cmd,
                success_retcodes=success_retcodes,
                **kwargs)
 
-    return ret['stdout'] if not hide_output else ''
+    return '' if hide_output else ret['stdout']
 
 def _python_shell_default(python_shell, __pub_jid):
     '''
@@ -277,25 +277,17 @@ def _is_valid_shell(shell):
         return True  # Don't even try this for Windows
     shells = '/etc/shells'
     available_shells = []
-    if os.path.exists(shells):
-        try:
-            with hubblestack.utils.files.fopen(shells, 'r') as shell_fp:
-                lines = [hubblestack.utils.stringutils.to_unicode(x)
-                         for x in shell_fp.read().splitlines()]
-            for line in lines:
-                if line.startswith('#'):
-                    continue
-                else:
-                    available_shells.append(line)
-        except OSError:
-            return True
-    else:
+    if not os.path.exists(shells):
         # No known method of determining available shells
         return None
-    if shell in available_shells:
+    try:
+        with hubblestack.utils.files.fopen(shells, 'r') as shell_fp:
+            lines = [hubblestack.utils.stringutils.to_unicode(x)
+                     for x in shell_fp.read().splitlines()]
+        available_shells.extend(line for line in lines if not line.startswith('#'))
+    except OSError:
         return True
-    else:
-        return False
+    return shell in available_shells
 
 def _check_loglevel(level='info'):
     '''
@@ -303,10 +295,7 @@ def _check_loglevel(level='info'):
     '''
     try:
         level = level.lower()
-        if level == 'quiet':
-            return None
-        else:
-            return LOG_LEVELS[level]
+        return None if level == 'quiet' else LOG_LEVELS[level]
     except (AttributeError, KeyError):
         log.error(
             'Invalid output_loglevel \'%s\'. Valid levels are: %s. Falling '
@@ -332,8 +321,7 @@ def _check_avail(cmd):
     Check to see if the given command can be run
     '''
     if isinstance(cmd, list):
-        cmd = ' '.join([str(x) if not isinstance(x, str) else x
-                        for x in cmd])
+        cmd = ' '.join([x if isinstance(x, str) else str(x) for x in cmd])
     bret = True
     wret = False
     if __mods__['config.get']('cmd_blacklist_glob'):

@@ -331,9 +331,9 @@ def _get_s3_key():
         'cache_expire': S3_CACHE_EXPIRE,
     }
 
-    ret = dict()
+    ret = {}
     for k in defaults:
-        s3k = 's3.' + k
+        s3k = f's3.{k}'
         ret[k] = __opts__.get(s3k, defaults[k])
 
     # kms_keyid = __opts__['aws.kmw.keyid'] if 'aws.kms.keyid' in __opts__ else None
@@ -448,7 +448,10 @@ def _refresh_buckets_cache_file(cache_file):
                     break
                 headers.append(header)
             ret.extend(tmp)
-            if all([header.get('IsTruncated', 'false') == 'false' for header in headers]):
+            if all(
+                header.get('IsTruncated', 'false') == 'false'
+                for header in headers
+            ):
                 break
             marker = tmp[-1]['Key']
         return ret
@@ -500,7 +503,7 @@ def _refresh_buckets_cache_file(cache_file):
             if salt_env:
                 continue
 
-            environments = set([(os.path.dirname(k['Key']).split('/', 1))[0] for k in files])
+            environments = {(os.path.dirname(k['Key']).split('/', 1))[0] for k in files}
 
             # pull out the files for the environment
             _parse_env(environments=environments, bucket_name=bucket_name, files=files)

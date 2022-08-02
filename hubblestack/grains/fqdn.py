@@ -16,9 +16,12 @@ def fqdn():
     appears to be susceptible to issues with DNS
     """
     grains = {}
-    local_fqdn = None
-    if not hubblestack.utils.platform.is_windows():
-        local_fqdn = __mods__['cmd.run']('hostname --fqdn')
+    local_fqdn = (
+        None
+        if hubblestack.utils.platform.is_windows()
+        else __mods__['cmd.run']('hostname --fqdn')
+    )
+
     if local_fqdn and 'hostname: ' not in local_fqdn:
         grains['local_fqdn'] = local_fqdn
     return grains
@@ -52,12 +55,12 @@ def dest_ip():
 def _find_addr(interfaces):
     """ Helper function that looks for ip addresses that are not empty, l0 or docker0 """
     # Fallback to "best guess"
-    filtered_interfaces = {}
-    # filter out empty, lo, and docker0
-    for interface, ips in interfaces.items():
-        if not ips or interface in ('lo', 'docker0'):
-            continue
-        filtered_interfaces[interface] = ips
+    filtered_interfaces = {
+        interface: ips
+        for interface, ips in interfaces.items()
+        if ips and interface not in ('lo', 'docker0')
+    }
+
     # Use eth0 if present
     if 'eth0' in filtered_interfaces:
         for ip_addr in filtered_interfaces['eth0']:
@@ -70,7 +73,7 @@ def _find_addr(interfaces):
                 if ip_addr != '127.0.0.1':
                     return {'local_ip4': ip_addr}
     # Use whatever isn't 127.0.0.1
-    for interface, ips in filtered_interfaces.items():
+    for ips in filtered_interfaces.values():
         for ip_addr in ips:
             if ip_addr != '127.0.0.1':
                 return {'local_ip4': ip_addr}

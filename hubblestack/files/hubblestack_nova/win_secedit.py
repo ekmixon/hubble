@@ -86,25 +86,27 @@ def audit(data_list, tags, labels, debug=False, **kwargs):
                 # Blacklisted audit (do not include)
                 if audit_type == 'blacklist':
                     if 'no one' in output:
-                        if name not in __secdata__:
-                            ret['Success'].append(tag_data)
-                        else:
+                        if name in __secdata__:
                             tag_data['failure_reason'] = "No value/account should be configured " \
                                                          "under '{0}', but atleast one value/account" \
                                                          " is configured on the system.".format(name)
                             ret['Failure'].append(tag_data)
-                    else:
-                        if name in __secdata__:
-                            secret = _translate_value_type(__secdata__[name], tag_data['value_type'], tag_data['match_output'])
-                            if secret:
-                                tag_data['failure_reason'] = "Value of the key '{0}' is configured to a " \
-                                                             "blacklisted value '{1}({2})'" \
-                                                             .format(name,
-                                                                     tag_data['match_output'],
-                                                                     tag_data['value_type'])
-                                ret['Failure'].append(tag_data)
-                            else:
-                                ret['Success'].append(tag_data)
+                        else:
+                            ret['Success'].append(tag_data)
+                    elif name in __secdata__:
+                        if secret := _translate_value_type(
+                            __secdata__[name],
+                            tag_data['value_type'],
+                            tag_data['match_output'],
+                        ):
+                            tag_data['failure_reason'] = "Value of the key '{0}' is configured to a " \
+                                                         "blacklisted value '{1}({2})'" \
+                                                         .format(name,
+                                                                 tag_data['match_output'],
+                                                                 tag_data['value_type'])
+                            ret['Failure'].append(tag_data)
+                        else:
+                            ret['Success'].append(tag_data)
 
                 # Whitelisted audit (must include)
                 if audit_type == 'whitelist':
@@ -133,7 +135,7 @@ def audit(data_list, tags, labels, debug=False, **kwargs):
                                                                              tag_data['value_type'])
                             ret['Failure'].append(tag_data)
                     else:
-                        log.error('name {} was not in __secdata__'.format(name))
+                        log.error(f'name {name} was not in __secdata__')
                         tag_data['failure_reason'] = "Value of the key '{0}' could not be found in" \
                                                      " the registry. It should be set to '{1}({2})'" \
                                                      .format(name,
@@ -192,9 +194,7 @@ def _get_tags(data):
                 # secedit:whitelist:PasswordComplexity:data:Server 2012
                 if isinstance(tags, dict):
                     # malformed yaml, convert to list of dicts
-                    tmp = []
-                    for name, tag in tags.items():
-                        tmp.append({name: tag})
+                    tmp = [{name: tag} for name, tag in tags.items()]
                     tags = tmp
                 for item in tags:
                     for name, tag in item.items():
@@ -209,7 +209,7 @@ def _get_tags(data):
                                           'tag': tag,
                                           'module': 'win_secedit',
                                           'type': toplist}
-                        formatted_data.update(tag_data)
+                        formatted_data |= tag_data
                         formatted_data.update(audit_data)
                         formatted_data.pop('data')
                         ret[tag].append(formatted_data)
@@ -221,10 +221,9 @@ def _secedit_export():
     specify the location of the file and the file will persist, or let the
     function create it and the file will be deleted on completion.  Should
     only be called once."""
-    dump = r"C:\ProgramData\{}.inf".format(uuid.uuid4())
+    dump = f"C:\ProgramData\{uuid.uuid4()}.inf"
     try:
-        ret = __mods__['cmd.run']('secedit /export /cfg {0}'.format(dump))
-        if ret:
+        if ret := __mods__['cmd.run']('secedit /export /cfg {0}'.format(dump)):
             secedit_ret = _secedit_import(dump)
             ret = __mods__['file.remove'](dump)
             return secedit_ret
@@ -241,12 +240,8 @@ def _secedit_import(inf_file):
         for line in f:
             line = str(line).replace('\r\n', '')
             if not line.startswith('[') and not line.startswith('Unicode'):
-                if line.find(' = ') != -1:
-                    k, v = line.split(' = ')
-                    sec_return[k] = v
-                else:
-                    k, v = line.split('=')
-                    sec_return[k] = v
+                k, v = line.split(' = ') if ' = ' in line else line.split('=')
+                sec_return[k] = v
     return sec_return
 
 
@@ -305,10 +300,7 @@ def _translate_value_type(current, value, evaluator, __sidaccounts__=False):
             current = current.replace('"', '')
         if '"' in evaluator:
             evaluator = evaluator.replace('"', '')
-        if int(current) >= int(evaluator):
-            return True
-        else:
-            return False
+        return int(current) >= int(evaluator)
     elif 'less' in value:
         if ',' in evaluator:
             evaluator = evaluator.split(',')[1]
@@ -318,13 +310,7 @@ def _translate_value_type(current, value, evaluator, __sidaccounts__=False):
             current = current.replace('"', '')
         if '"' in evaluator:
             evaluator = evaluator.replace('"', '')
-        if int(current) <= int(evaluator):
-            if current != '0':
-                return True
-            else:
-                return False
-        else:
-            return False
+        return int(current) <= int(evaluator) and current != '0'
     elif 'equal' in value:
         if ',' not in evaluator and type(evaluator) != list:
             tmp_evaluator = _evaluator_translator(evaluator)
@@ -338,23 +324,14 @@ def _translate_value_type(current, value, evaluator, __sidaccounts__=False):
                     ret_final.append(True)
                 else:
                     ret_final.append(False)
-            if False in ret_final:
-                return False
-            else:
-                return True
-        if current.lower() == evaluator:
-            return True
-        else:
-            return False
+            return False not in ret_final
+        return current.lower() == evaluator
     elif 'account_contains' in value:  # Require an account to be present, but not exclusively.
         if "*S-" not in evaluator:
             evaluator = _account_audit(evaluator, __sidaccounts__)
         evaluator_list = evaluator.split(',')
         current_list = current.split(',')
-        for list_item in evaluator_list:
-            if list_item not in current_list:
-                return False
-        return True
+        return all(list_item in current_list for list_item in evaluator_list)
     elif 'contains' in value:
         if type(evaluator) != list:
             evaluator = evaluator.split(',')
@@ -366,10 +343,7 @@ def _translate_value_type(current, value, evaluator, __sidaccounts__=False):
                     ret_final.append(True)
                 else:
                     ret_final.append(False)
-            if False in ret_final:
-                return False
-            else:
-                return True
+            return False not in ret_final
     elif 'account' in value:
         if "*S-" not in evaluator:
             evaluator = _account_audit(evaluator, __sidaccounts__)
@@ -382,19 +356,15 @@ def _translate_value_type(current, value, evaluator, __sidaccounts__=False):
             else:
                 list_match = False
                 break
-        if list_match:
-            for list_item in current_list:
-                if list_item in evaluator_list:
-                    list_match = True
-                else:
-                    list_match = False
-                    break
-        else:
+        if not list_match:
             return False
-        if list_match:
-            return True
-        else:
-            return False
+        for list_item in current_list:
+            if list_item in evaluator_list:
+                list_match = True
+            else:
+                list_match = False
+                break
+        return bool(list_match)
     elif 'configured' in value:
         if current == '':
             return False
@@ -420,7 +390,7 @@ def _evaluator_translator(input_string):
         return '1'
     elif 'failure' in input_string:
         return '2'
-    elif input_string == 'success,failure' or input_string == 'failure,success':
+    elif input_string in ['success,failure', 'failure,success']:
         return '3'
     elif input_string in ['0', '1', '2', '3']:
         return input_string
@@ -438,15 +408,15 @@ def _account_audit(current, __sidaccounts__):
     if __sidaccounts__:
         for usr in user_list:
             if usr == 'Guest':
-                if not ret_string:
-                    ret_string = usr
+                if ret_string:
+                    ret_string += f',{usr}'
                 else:
-                    ret_string += ',' + usr
+                    ret_string = usr
             if usr in __sidaccounts__:
                 if not ret_string:
-                    ret_string = '*' + __sidaccounts__[usr]
+                    ret_string = f'*{__sidaccounts__[usr]}'
                 else:
-                    ret_string += ',*' + __sidaccounts__[usr]
+                    ret_string += f',*{__sidaccounts__[usr]}'
         return ret_string
     else:
         log.debug('getting the SIDs for each account failed')
@@ -455,34 +425,37 @@ def _account_audit(current, __sidaccounts__):
 
 def _reg_value_translator(input_string):
     input_string = input_string.lower()
-    if input_string == 'enabled':
-        return '4,1'
-    elif input_string == 'disabled':
-        return '4,0'
-    elif input_string == 'users cant add or log on with microsoft accounts':
-        return '4,3'
-    elif input_string == 'administrators':
+    if input_string == 'administrators':
         return '1,"0"'
-    elif input_string == 'lock workstation':
-        return '1,"1"'
-    elif input_string == 'accept if provided by client':
-        return '4,1'
-    elif input_string == 'classic - local users authenticate as themselves':
-        return '4,1'
-    elif input_string == 'rc4_hmac_md5, aes128_hmac_sha1, aes256_hmac_sha1, future encryption types':
-        return '4,2147483644'
-    elif input_string == 'send ntlmv2 response only. refuse lm & ntlm':
-        return '4,5'
-    elif input_string == 'negotiate signing':
-        return '4,1'
-    elif input_string == 'require ntlmv2 session security, require 128-bit encryption':
-        return '4,537395200'
-    elif input_string == 'prompt for consent on the secure desktop':
-        return '4,2'
-    elif input_string == 'automatically deny elevation requests':
-        return '4,0'
     elif input_string == 'defined (blank)':
         return '7,'
+    elif input_string in ['disabled', 'automatically deny elevation requests']:
+        return '4,0'
+    elif input_string in [
+        'enabled',
+        'accept if provided by client',
+        'classic - local users authenticate as themselves',
+        'negotiate signing',
+    ]:
+        return '4,1'
+    elif input_string == 'lock workstation':
+        return '1,"1"'
+    elif input_string == 'prompt for consent on the secure desktop':
+        return '4,2'
+    elif (
+        input_string
+        == 'rc4_hmac_md5, aes128_hmac_sha1, aes256_hmac_sha1, future encryption types'
+    ):
+        return '4,2147483644'
+    elif (
+        input_string
+        == 'require ntlmv2 session security, require 128-bit encryption'
+    ):
+        return '4,537395200'
+    elif input_string == 'send ntlmv2 response only. refuse lm & ntlm':
+        return '4,5'
+    elif input_string == 'users cant add or log on with microsoft accounts':
+        return '4,3'
     else:
         return input_string
 
@@ -491,7 +464,4 @@ def _is_domain_controller():
     ret = __mods__['reg.read_value'](hive="HKLM",
                                      key=r"SYSTEM\CurrentControlSet\Control\ProductOptions",
                                      vname="ProductType")
-    if ret['vdata'] == "LanmanNT":
-        return True
-    else:
-        return False
+    return ret['vdata'] == "LanmanNT"

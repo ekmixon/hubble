@@ -26,7 +26,7 @@ def get_args(*a):
 
 def show_info(dirname):
     dq = DiskQueue(dirname)
-    print("QUEUE={} ITEMS={} SIZE={}".format(dirname, dq.cn, dq.sz))
+    print(f"QUEUE={dirname} ITEMS={dq.cn} SIZE={dq.sz}")
 
 def evil_decode(docbytes):
     decoder = json.JSONDecoder()
@@ -71,7 +71,7 @@ def main(args):
             else:
                 show_info(dirname)
         except Exception as e:
-            print("# Exception while reading {}: {}".format(dirname, repr(e)))
+            print(f"# Exception while reading {dirname}: {repr(e)}")
 
 if __name__ == '__main__':
     try:

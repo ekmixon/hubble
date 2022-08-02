@@ -112,7 +112,7 @@ def audit(data_list, tags, labels, debug=False, **kwargs):
                     check_type = tag_data.get('check_type')
 
                 if check_type not in ['hard', 'soft']:
-                    log.error('Unrecognized option: ' + check_type)
+                    log.error(f'Unrecognized option: {check_type}')
                     tag_data = copy.deepcopy(tag_data)
                     tag_data['error'] = 'check_type can only be hard or soft'
                     ret['Failure'].append(tag_data)
@@ -120,17 +120,16 @@ def audit(data_list, tags, labels, debug=False, **kwargs):
 
                 found = _check_mount_attribute(name, attribute, check_type)
 
-                if audittype == 'blacklist':
-                    if found:
-                        ret['Failure'].append(tag_data)
-                    else:
-                        ret['Success'].append(tag_data)
-
-                elif audittype == 'whitelist':
-                    if found:
-                        ret['Success'].append(tag_data)
-                    else:
-                        ret['Failure'].append(tag_data)
+                if (
+                    audittype == 'blacklist'
+                    and found
+                    or audittype != 'blacklist'
+                    and audittype == 'whitelist'
+                    and not found
+                ):
+                    ret['Failure'].append(tag_data)
+                elif audittype in ['blacklist', 'whitelist']:
+                    ret['Success'].append(tag_data)
 
     return ret
 
@@ -185,9 +184,7 @@ def _get_tags(data):
                 # mount:blacklist:0:telnet:data:Debian-8
                 if isinstance(tags, dict):
                     # malformed yaml, convert to list of dicts
-                    tmp = []
-                    for name, tag in tags.items():
-                        tmp.append({name: tag})
+                    tmp = [{name: tag} for name, tag in tags.items()]
                     tags = tmp
                 for item in tags:
                     for name, tag in item.items():
@@ -202,7 +199,7 @@ def _get_tags(data):
                                           'tag': tag,
                                           'module': 'mount',
                                           'type': toplist}
-                        formatted_data.update(tag_data)
+                        formatted_data |= tag_data
                         formatted_data.update(audit_data)
                         formatted_data.pop('data')
                         ret[tag].append(formatted_data)
@@ -217,23 +214,11 @@ def _check_mount_attribute(path, attribute, check_type):
     """
 
     if not os.path.exists(path):
-        if check_type == 'hard':
-            return False
-        else:
-            return True
-
+        return check_type != 'hard'
     mount_object = __mods__['mount.active']()
 
-    if path in mount_object:
-        attributes = mount_object.get(path)
-        opts = attributes.get('opts')
-        if attribute in opts:
-            return True
-        else:
-            return False
-
-    else:
-        if check_type == 'hard':
-            return False
-        else:
-            return True
+    if path not in mount_object:
+        return check_type != 'hard'
+    attributes = mount_object.get(path)
+    opts = attributes.get('opts')
+    return attribute in opts

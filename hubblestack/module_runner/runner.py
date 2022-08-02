@@ -220,15 +220,20 @@ class Runner(ABC):
             >1.0 AND <10.0 AND >=2.0. OR >=4.0 AND <=5.0 OR ==6.0
             >1
         """
-        log.debug("Current hubble version: %s" % __grains__['hubble_version'])
+        log.debug(f"Current hubble version: {__grains__['hubble_version']}")
         current_version = version.parse(__grains__['hubble_version'])
         version_str = yaml_dictionary_data.get('hubble_version', '').strip()
         if not version_str:
-            log.debug("No hubble version provided for check id: %s Thus returning true for this check" % (profile_id))
+            log.debug(
+                f"No hubble version provided for check id: {profile_id} Thus returning true for this check"
+            )
+
             return True
         if '*' in version_str:
-            log.error("Invalid syntax in version condition. No regex is supported. check_id: %s hubble_version: %s" % (
-            profile_id, version_str))
+            log.error(
+                f"Invalid syntax in version condition. No regex is supported. check_id: {profile_id} hubble_version: {version_str}"
+            )
+
             return False
         version_str = version_str.upper()
         version_list = [[x.strip() for x in item.split("AND")] for item in version_str.split("OR")]
@@ -237,33 +242,35 @@ class Runner(ABC):
             condition_match = True
             for condition in expression:  # Inner loop to evaluate AND conditions
                 result = False
-                if ' ' not in condition:
-                    if condition.startswith('<='):
-                        condition = condition[2:]
-                        result = current_version <= version.parse(condition)
-                    elif condition.startswith('>='):
-                        condition = condition[2:]
-                        result = current_version >= version.parse(condition)
-                    elif condition.startswith('<'):
-                        condition = condition[1:]
-                        result = current_version < version.parse(condition)
-                    elif condition.startswith('>'):
-                        condition = condition[1:]
-                        result = current_version > version.parse(condition)
-                    elif condition.startswith('=='):
-                        condition = condition[2:]
-                        result = current_version == version.parse(condition)
-                    elif condition.startswith('!='):
-                        condition = condition[2:]
-                        result = current_version != version.parse(condition)
-                    else:
-                        # Throw error as unexpected string occurs
-                        log.error(
-                            "Invalid syntax in version condition, check_id: %s condition: %s" % (profile_id, condition))
-                else:
+                if ' ' in condition:
                     log.error(
-                        "Invalid syntax in hubble version. No operator provided for check_id: %s condition: %s" % (
-                        profile_id, condition))
+                        f"Invalid syntax in hubble version. No operator provided for check_id: {profile_id} condition: {condition}"
+                    )
+
+                elif condition.startswith('<='):
+                    condition = condition[2:]
+                    result = current_version <= version.parse(condition)
+                elif condition.startswith('>='):
+                    condition = condition[2:]
+                    result = current_version >= version.parse(condition)
+                elif condition.startswith('<'):
+                    condition = condition[1:]
+                    result = current_version < version.parse(condition)
+                elif condition.startswith('>'):
+                    condition = condition[1:]
+                    result = current_version > version.parse(condition)
+                elif condition.startswith('=='):
+                    condition = condition[2:]
+                    result = current_version == version.parse(condition)
+                elif condition.startswith('!='):
+                    condition = condition[2:]
+                    result = current_version != version.parse(condition)
+                else:
+                        # Throw error as unexpected string occurs
+                    log.error(
+                        f"Invalid syntax in version condition, check_id: {profile_id} condition: {condition}"
+                    )
+
                 condition_match = condition_match and result
                 if not condition_match:
                     # Found a false condition. No need to evaluate further for AND conditions

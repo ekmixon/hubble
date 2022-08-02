@@ -20,11 +20,14 @@ def audit(data_list, tags, labels, debug=False, **kwargs):
     """
     ret = {'Success': [], 'Failure': []}
 
-    __tags__ = []
-    for profile, data in data_list:
-        if 'pkgng_audit' in data:
-            __tags__ = ['pkgng_audit']
-            break
+    __tags__ = next(
+        (
+            ['pkgng_audit']
+            for profile, data in data_list
+            if 'pkgng_audit' in data
+        ),
+        [],
+    )
 
     if debug:
         log.debug('pkgng audit __tags__:')

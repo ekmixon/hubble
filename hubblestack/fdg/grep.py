@@ -67,9 +67,8 @@ def stdin(pattern, starting_string=None, grep_args=None,
 
     ``grep_args`` can be used to pass in arguments to grep.
     """
-    if format_chained:
-        if starting_string:
-            chained = starting_string.format(chained)
+    if format_chained and starting_string:
+        chained = starting_string.format(chained)
 
     if grep_args is None:
         grep_args = []

@@ -210,7 +210,7 @@ def validate_params(block_id, block_dict, extra_args=None):
     if not name:
         name = runner_utils.get_param_for_module(block_id, block_dict, 'name')
     if not name:
-        error['name'] = 'Mandatory parameter: name not found for id: %s' % (block_id)
+        error['name'] = f'Mandatory parameter: name not found for id: {block_id}'
 
     if error:
         raise HubbleCheckValidationError(error)
@@ -242,9 +242,9 @@ def execute(block_id, block_dict, extra_args=None):
 
     installed_pkgs_dict = __mods__['pkg.list_pkgs']()
     filtered_pkgs_list = fnmatch.filter(installed_pkgs_dict, name)
-    result_dict = {}
-    for package in filtered_pkgs_list:
-        result_dict[package] = installed_pkgs_dict[package]
+    result_dict = {
+        package: installed_pkgs_dict[package] for package in filtered_pkgs_list
+    }
 
     return runner_utils.prepare_positive_result_for_module(block_id, result_dict)
 

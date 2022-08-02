@@ -41,23 +41,21 @@ build_dependencies = [
     "urllib3>=1.26.5",
 ]
 
-if distro == "redhat" or distro == "centos":
-    if version.startswith("6"):
-        data_files = [
-            ("/etc/init.d", ["pkg/hubble"]),
-            ("/etc/hubble", ["conf/hubble"]),
-        ]
-    elif version.startswith("7"):
-        data_files = [
-            ("/usr/lib/systemd/system", ["pkg/source/hubble.service"]),
-            ("/etc/hubble", ["conf/hubble"]),
-        ]
-elif distro == "Amazon Linux AMI":
+if (
+    distro in {"redhat", "centos"}
+    and version.startswith("6")
+    or distro not in ["redhat", "centos"]
+    and distro == "Amazon Linux AMI"
+):
     data_files = [
         ("/etc/init.d", ["pkg/hubble"]),
         ("/etc/hubble", ["conf/hubble"]),
     ]
-
+elif distro in {"redhat", "centos"} and version.startswith("7"):
+    data_files = [
+        ("/usr/lib/systemd/system", ["pkg/source/hubble.service"]),
+        ("/etc/hubble", ["conf/hubble"]),
+    ]
 if platform_name == "Windows":
     build_dependencies.remove("pyinotify")
 

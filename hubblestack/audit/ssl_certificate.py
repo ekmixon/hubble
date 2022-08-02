@@ -244,8 +244,7 @@ def validate_params(block_id, block_dict, extra_args=None):
     log.debug('Module: ssl_certificate Start validating params for check-id: {0}'.format(block_id))
 
     error = {}
-    endpoint_chained = runner_utils.get_chained_param(extra_args)
-    if endpoint_chained:
+    if endpoint_chained := runner_utils.get_chained_param(extra_args):
         host_ip = endpoint_chained.get('host_ip')
         host_port = endpoint_chained.get('host_port')
     else:
@@ -257,11 +256,15 @@ def validate_params(block_id, block_dict, extra_args=None):
 
     endpoint_present = bool(host_ip and host_port)
     if not endpoint_present and not path:
-        error['endpoint'] = 'Mandatory parameter: host_ip, host_port or path not found for id: %s' % (block_id)
+        error[
+            'endpoint'
+        ] = f'Mandatory parameter: host_ip, host_port or path not found for id: {block_id}'
+
     if endpoint_present and path:
         error[
-            'endpoint'] = 'Only one of either endpoint data or path is required not both. Only one certificate per check for id: %s' % (
-            block_id)
+            'endpoint'
+        ] = f'Only one of either endpoint data or path is required not both. Only one certificate per check for id: {block_id}'
+
 
     if ssl_timeout < 0:
         error['ssl_timeout'] = 'Incorrect value provided for ssl_timeout'
@@ -292,8 +295,7 @@ def execute(block_id, block_dict, extra_args=None):
     """
     start_time = time.time()
     log.debug('Executing ssl_certificate module for id: {0}'.format(block_id))
-    endpoint_chained = runner_utils.get_chained_param(extra_args)
-    if endpoint_chained:
+    if endpoint_chained := runner_utils.get_chained_param(extra_args):
         host_ip = endpoint_chained.get('host_ip')
         host_port = endpoint_chained.get('host_port')
     else:
@@ -334,24 +336,25 @@ def get_filtered_params_to_log(block_id, block_dict, extra_args=None):
     """
     log.debug('get_filtered_params_to_log for id: {0}'.format(block_id))
     chain_args = extra_args.get('chaining_args') if extra_args else None
-    endpoint_chained = runner_utils.get_chained_param(chain_args)
-    if endpoint_chained:
+    if endpoint_chained := runner_utils.get_chained_param(chain_args):
         host_ip = endpoint_chained.get('host_ip')
         host_port = endpoint_chained.get('host_port')
     else:
         host_ip = runner_utils.get_param_for_module(block_id, block_dict, 'host_ip')
         host_port = runner_utils.get_param_for_module(block_id, block_dict, 'host_port')
 
-    path = runner_utils.get_param_for_module(block_id, block_dict, 'path')
-    if path:
+    if path := runner_utils.get_param_for_module(block_id, block_dict, 'path'):
         return {'path': path}
     return {'host_ip': host_ip,
             'host_port': host_port}
 
 
 def _get_cert(source, port=443, ssl_timeout=3, from_file=False):
-    cert = _get_cert_from_file(source) if from_file else _get_cert_from_endpoint(source, port, ssl_timeout)
-    return cert
+    return (
+        _get_cert_from_file(source)
+        if from_file
+        else _get_cert_from_endpoint(source, port, ssl_timeout)
+    )
 
 
 def _get_cert_from_endpoint(server, port=443, ssl_timeout=3):
@@ -401,7 +404,7 @@ def _parse_cert(cert, host, port, path):
         not_before = datetime.strptime(x509.get_notBefore().decode('utf-8'), "%Y%m%d%H%M%SZ")
         has_expired = x509.has_expired()
         cert_details['ssl_cert_version'] = str(x509.get_version())
-        cert_details['ssl_has_expired'] = True if has_expired == 1 else False
+        cert_details['ssl_has_expired'] = has_expired == 1
         cert_details['ssl_serial_number'] = str(x509.get_serial_number())
         cert_details['ssl_end_time'] = str(not_after)
         cert_details['ssl_start_time'] = str(not_before)
@@ -416,14 +419,8 @@ def _parse_cert(cert, host, port, path):
 def _format_components(x509name):
     items = {}
     for item in x509name.get_components():
-        if isinstance(item[0], bytes):
-            key = item[0].decode("utf-8")
-        else:
-            key = item[0]
-        if isinstance(item[1], bytes):
-            value = item[1].decode("utf-8")
-        else:
-            value = item[1]
+        key = item[0].decode("utf-8") if isinstance(item[0], bytes) else item[0]
+        value = item[1].decode("utf-8") if isinstance(item[1], bytes) else item[1]
         items[key] = value
     return items
 
@@ -433,7 +430,7 @@ def _get_certificate_san(x509cert):
     trimmed_san_list = []
     try:
         ext_count = x509cert.get_extension_count()
-        for i in range(0, ext_count):
+        for i in range(ext_count):
             ext = x509cert.get_extension(i)
             if 'subjectAltName' in str(ext.get_short_name()):
                 san = ext.__str__()

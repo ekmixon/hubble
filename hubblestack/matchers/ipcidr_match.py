@@ -34,10 +34,8 @@ def match(tgt, opts=None):
     grains = opts["grains"]
 
     if proto not in grains:
-        match = False
+        return False
     elif isinstance(tgt, (ipaddress.IPv4Address, ipaddress.IPv6Address)):
-        match = str(tgt) in grains[proto]
+        return str(tgt) in grains[proto]
     else:
-        match = hubblestack.utils.network.in_subnet(tgt, grains[proto])
-
-    return match
+        return hubblestack.utils.network.in_subnet(tgt, grains[proto])

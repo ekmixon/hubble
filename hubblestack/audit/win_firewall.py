@@ -182,9 +182,11 @@ log = logging.getLogger(__name__)
 
 
 def __virtual__():
-    if not hubblestack.utils.platform.is_windows():
-        return False, 'This audit module only runs on windows'
-    return True
+    return (
+        True
+        if hubblestack.utils.platform.is_windows()
+        else (False, 'This audit module only runs on windows')
+    )
 
 
 def execute(block_id, block_dict, extra_args=None):
@@ -208,8 +210,7 @@ def execute(block_id, block_dict, extra_args=None):
     if not __firewalldata__:
         return runner_utils.prepare_negative_result_for_module(block_id, "firewall data couldn't be fetched")
 
-    chained_result = runner_utils.get_chained_param(extra_args)
-    if chained_result:
+    if chained_result := runner_utils.get_chained_param(extra_args):
         name = chained_result.get('name')
         value_type = chained_result.get('value_type')
     else:
@@ -225,10 +226,13 @@ def execute(block_id, block_dict, extra_args=None):
     result = {"name": name, "value_type": value_type, "setting_value": setting_value}
     log.debug("win_firewall module output for block_id %s, is %s", block_id, result)
 
-    if not result:
-        return runner_utils.prepare_negative_result_for_module(block_id, "firewall setting couldn't be fetched")
-
-    return runner_utils.prepare_positive_result_for_module(block_id, result)
+    return (
+        runner_utils.prepare_positive_result_for_module(block_id, result)
+        if result
+        else runner_utils.prepare_negative_result_for_module(
+            block_id, "firewall setting couldn't be fetched"
+        )
+    )
 
 
 def validate_params(block_id, block_dict, extra_args=None):
@@ -251,9 +255,7 @@ def validate_params(block_id, block_dict, extra_args=None):
 
     error = {}
 
-    # fetch required param
-    chained_result = runner_utils.get_chained_param(extra_args)
-    if chained_result:
+    if chained_result := runner_utils.get_chained_param(extra_args):
         name = chained_result.get('name')
         value_type = chained_result.get('value_type')
     else:
@@ -261,9 +263,12 @@ def validate_params(block_id, block_dict, extra_args=None):
         value_type = runner_utils.get_param_for_module(block_id, block_dict, 'value_type')
 
     if not name:
-        error['name'] = 'Mandatory parameter: name not found for id: %s' % block_id
+        error['name'] = f'Mandatory parameter: name not found for id: {block_id}'
     if not value_type:
-        error['value_type'] = 'Mandatory parameter: value_type not found for id: %s' % block_id
+        error[
+            'value_type'
+        ] = f'Mandatory parameter: value_type not found for id: {block_id}'
+
 
     if error:
         raise HubbleCheckValidationError(error)
@@ -286,9 +291,7 @@ def get_filtered_params_to_log(block_id, block_dict, extra_args=None):
     """
     log.debug('get_filtered_params_to_log for win_firewall and id: {0}'.format(block_id))
 
-    # fetch required param
-    chained_result = runner_utils.get_chained_param(extra_args)
-    if chained_result:
+    if chained_result := runner_utils.get_chained_param(extra_args):
         name = chained_result.get('name')
         value_type = chained_result.get('value_type')
     else:
@@ -302,11 +305,8 @@ def _export_firewall():
     dump = []
     try:
         temp = __mods__['cmd.run']('mode con:cols=1000 lines=1000; Get-NetFirewallProfile -PolicyStore ActiveStore', shell='powershell', python_shell=True)
-        temp = temp.split('\r\n\r\n')
-        if temp:
-            for item in temp:
-                if item != '':
-                    dump.append(item)
+        if temp := temp.split('\r\n\r\n'):
+            dump.extend(item for item in temp if item != '')
             return dump
         else:
             log.error('Nothing was returned from the firewall command.')

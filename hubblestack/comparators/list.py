@@ -369,7 +369,7 @@ def filter_compare(audit_id, result_to_compare, args):
 
     # Lets hand-over this new specific comparison to comparator orchestrator
     filter_comparator_args = {"type": "list"}
-    filter_comparator_args.update(args['filter_compare']['compare'])
+    filter_comparator_args |= args['filter_compare']['compare']
     return hubblestack.module_runner.comparator.run(
         audit_id,
         filter_comparator_args,

@@ -119,13 +119,12 @@ def parse_cmdline(params=None, chained=None, chained_status=None):
                 regex_list.append(regex)
             regex1 = "".join([regex_base, r"\s*([\",']).*?\2"])
             regex2 = "".join([regex_base, r"\s*.+?(?=(\s|$))"])
-            regex_list.append(regex1)
-            regex_list.append(regex2)
-
+            regex_list.extend((regex1, regex2))
             for regex in regex_list:
                 log.debug("looping with regex : %s", regex)
-                match_list = _get_match_list(regex, key_alias, command_line, delimiter)
-                if match_list:
+                if match_list := _get_match_list(
+                    regex, key_alias, command_line, delimiter
+                ):
                     ret_match_list.extend(match_list)
                     break
 
@@ -176,19 +175,15 @@ def _fetch_bracketed_value(value):
     :return: return a substring that has balanced brackets starting with the first opening bracket
     """
     stack = []
-    char_pos = 0
     stacked_once = False
-    for i in value:
+    for char_pos, i in enumerate(value):
         if i in open_bracket_list:
             stack.append(i)
             stacked_once = True
         elif i in close_bracket_list:
             pos = close_bracket_list.index(i)
-            if ((len(stack) > 0) and
-                    (open_bracket_list[pos] == stack[len(stack) - 1])):
+            if stack and open_bracket_list[pos] == stack[-1]:
                 stack.pop()
-        if stacked_once and len(stack) == 0:
+        if stacked_once and not stack:
             return value[:char_pos+1]
-        char_pos += 1
-
     return None

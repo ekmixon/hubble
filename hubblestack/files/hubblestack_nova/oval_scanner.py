@@ -90,9 +90,7 @@ def audit(data_list, tags, labels, debug=False, **kwargs):
             # Write report to file if specified
             if opt_output_file:
                 write_report_to_file(opt_output_file, report)
-            # Return Hubble formatted output
-            hubble_out = parse_impact_report(report, local_pkgs, ret)
-            return hubble_out
+            return parse_impact_report(report, local_pkgs, ret)
     return ret
 
 
@@ -148,17 +146,14 @@ def build_impact(vulns, local_pkgs, distro_name, result={}):
             if name in local_pkgs:
                 title = data['title']
                 cve = data['cve']
-                if 'severity' in data:
-                    severity = data['severity']
-                else:
-                    severity = 'N/A'
+                severity = data['severity'] if 'severity' in data else 'N/A'
                 if distro_name in ('centos', 'redhat'):
                     advisory = data['rhsa']
                 elif 'advisories' in data:
                     advisory = data['advisories']
                 else:
                     advisory = cve
-                impact = get_impact(
+                if impact := get_impact(
                     local_pkgs[name],
                     distro_name,
                     name=name,
@@ -166,9 +161,8 @@ def build_impact(vulns, local_pkgs, distro_name, result={}):
                     title=title,
                     cve=cve,
                     advisory=advisory,
-                    severity=severity
-                )
-                if impact:
+                    severity=severity,
+                ):
                     result = build_impact_report(impact)
     return result
 
@@ -221,9 +215,9 @@ def build_pkg_src_ref(local_pkgs, pkg_src_ref={}):
     for pkg, detail in pkg_detail.items():
         if 'Source' in next(iter(detail.values())):
             source = next(iter(detail.values()))['Source'].split()[0]
-            if source not in pkg_src_ref and not source == pkg:
+            if source not in pkg_src_ref and source != pkg:
                 pkg_src_ref[source] = []
-            if not source == pkg:
+            if source != pkg:
                 pkg_src_ref[source].append(pkg)
     return pkg_src_ref
 
@@ -249,12 +243,11 @@ def create_vulns(oval_and_maps, vulns={}):
             objects = data['objects']
             for obj in objects:
                 pkg_group = None
-                if 'name' in oval['objects'][obj['object_id']]:
-                    name = oval['objects'][obj['object_id']]['name']
-                    if name in oval['vars']:
-                        pkg_group = oval['vars'][name]['pkg_names']
-                else:
+                if 'name' not in oval['objects'][obj['object_id']]:
                     continue
+                name = oval['objects'][obj['object_id']]['name']
+                if name in oval['vars']:
+                    pkg_group = oval['vars'][name]['pkg_names']
                 if 'version' in oval['states'][obj['state_id']]:
                     version = oval['states'][obj['state_id']]['version']
                 else:
@@ -286,8 +279,7 @@ def map_oval_ids(oval, id_maps={}):
             else:
                 continue
             objects.append({'object_id': object_id, 'state_id': state_id})
-    oval_and_maps = (id_maps, oval)
-    return oval_and_maps
+    return id_maps, oval
 
 
 # Build oval from source
@@ -357,9 +349,7 @@ def build_definitions(root, namespace, defs={}):
                 severity = advisory.find('oval:severity', namespace).text
                 definition_data['severity'] = severity
                 adv_refs = advisory.findall('oval:ref', namespace)
-                advisories = []
-                for ref in adv_refs:
-                    advisories.append(ref.text)
+                advisories = [ref.text for ref in adv_refs]
                 definition_data['advisories'] = advisories
             for criterion in definition.iter():
                 if is_et(criterion) and 'test_ref' in criterion.attrib:
@@ -458,8 +448,7 @@ def get_source_content(distro_name, distro_release, distro_codename, base_url, s
     if not local_file:
         url = get_definition_source(base_url, source_file, distro_name, distro_release, distro_codename)
         logging.info('Reading remote file: {0}, this could take some time...'.format(url))
-        source = requests.get(url).content
-        return source
+        return requests.get(url).content
     else:
         logging.info('Found local file: {0}'.format(local_file))
         with open(local_file, 'rb') as f:
@@ -478,5 +467,4 @@ def get_definition_source(base_url, source_file, distro_name, distro_release, di
     elif distro_name in ('debian'):
         source = source_file or 'oval-definitions-{0}.xml'.format(distro_codename)
         base = base_url or 'https://www.debian.org/security/oval/'
-    url = base + source
-    return url
+    return base + source

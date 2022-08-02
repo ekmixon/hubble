@@ -210,12 +210,12 @@ def validate_params(block_id, block_dict, extra_args=None):
     """
     log.debug('Module: osquery Start validating params for check-id: {0}'.format(block_id))
 
-    query = runner_utils.get_param_for_module(block_id, block_dict, 'query')
-
-    if not query:
+    if query := runner_utils.get_param_for_module(
+        block_id, block_dict, 'query'
+    ):
+        log.debug('Validation success for check-id: {0}'.format(block_id))
+    else:
         raise HubbleCheckValidationError('Mandatory parameter: {0} not found for id: {1}'.format('query', block_id))
-
-    log.debug('Validation success for check-id: {0}'.format(block_id))
 
 
 def execute(block_id, block_dict, extra_args=None):

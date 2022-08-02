@@ -57,11 +57,10 @@ def t_bucket(timestamp=None, bucket_len=None):
         bucket_len = int(get_hubble_status_opt('bucket_len'))
     timestamp = int(timestamp)
     seed = timestamp % bucket_len
-    bucket = ((timestamp - seed), bucket_len)
-    return bucket
+    return timestamp - seed, bucket_len
 
 
-__opts__ = dict()
+__opts__ = {}
 
 
 def get_hubble_status_opt(name, require_type=None):
@@ -72,8 +71,7 @@ def get_hubble_status_opt(name, require_type=None):
 
         Various defaults are defined in hubblestack.status.DEFAULTS
     """
-    for hubble_status_loc in (('hubble_status', name), ('hubble', 'status', name),
-                              ('hubble_status_' + name)):
+    for hubble_status_loc in (('hubble_status', name), ('hubble', 'status', name), f'hubble_status_{name}'):
         opts = __opts__
         for k in hubble_status_loc:
             if isinstance(opts, dict):
@@ -95,9 +93,8 @@ def get_hubble_or_salt_opt(name):
     """return the option specified by name found in __opts__ or __opts__['hubble'] """
     if name in __opts__:
         return __opts__[name]
-    if 'hubble' in __opts__:
-        if name in __opts__['hubble']:
-            return __opts__['hubble'][name]
+    if 'hubble' in __opts__ and name in __opts__['hubble']:
+        return __opts__['hubble'][name]
     return None
 
 
@@ -197,7 +194,7 @@ class HubbleStatus(object):
             self.ema_dur = None
             # reported is used exclusively by modules/hstatus
             # cleared on every mark()
-            self.reported = list()
+            self.reported = []
 
         def get_bucket(self, bucket, no_append=False):
             """ find the bucket with the `bucket` id and return it or append it to the list of
@@ -242,7 +239,7 @@ class HubbleStatus(object):
                    'dt': self.dt, 'ema_dt': self.ema_dt, 'first_t': self.first_t,
                    'bucket': self.bucket, 'bucket_len': self.bucket_len}
             if self.dur is not None:
-                ret.update({'dur': self.dur, 'ema_dur': self.ema_dur})
+                ret |= {'dur': self.dur, 'ema_dur': self.ema_dur}
             return ret
 
         def mark(self, timestamp=None):
@@ -268,7 +265,7 @@ class HubbleStatus(object):
             last_mark = self.dt
             self.last_t = timestamp
             self.ema_dt = last_mark if self.ema_dt is None else 0.5 * self.ema_dt + 0.5 * last_mark
-            self.reported = list()
+            self.reported = []
             return self
 
         def fin(self):
@@ -285,8 +282,7 @@ class HubbleStatus(object):
 
         def __iter__(self):
             if self.next is not None:
-                for i in self.next:
-                    yield i
+                yield from self.next
             yield self
 
     def __init__(self, namespace, *resources):
@@ -324,16 +320,18 @@ class HubbleStatus(object):
         """
         if self.namespace is None or self.namespace.startswith('_'):
             return name
-        if name.startswith(self.namespace + '.'):
+        if name.startswith(f'{self.namespace}.'):
             return name
-        return self.namespace + '.' + name
+        return f'{self.namespace}.{name}'
 
     def _checkmark(self, resource):
         """ ensure the resource `resource` is tracked by the instance """
         res_id = self._namespaced(resource)
         if res_id not in self.resources:
             raise HubbleStatusResourceNotFound(
-                '"{}" is not a resource of this HubbleStatus instance'.format(res_id))
+                f'"{res_id}" is not a resource of this HubbleStatus instance'
+            )
+
         return res_id
 
     def _check_depth(self, resource):
@@ -360,8 +358,7 @@ class HubbleStatus(object):
     @classmethod
     def get_reported(cls, resource, bucket):
         """ return the reported list of the bucket `bucket` in the cls.dat[resource] """
-        n_bucket = cls.dat[resource].find_bucket(bucket)
-        if n_bucket:
+        if n_bucket := cls.dat[resource].find_bucket(bucket):
             return n_bucket.reported
         return None
 
@@ -414,9 +411,8 @@ class HubbleStatus(object):
                 stat_handle.fin()
                 return ret
             return inner
-        if invoke:
-            return decorator(invoke)
-        return decorator
+
+        return decorator(invoke) if invoke else decorator
 
     @classmethod
     def stats(cls):
@@ -474,9 +470,9 @@ class HubbleStatus(object):
 
         stats_short = cls.short()
 
-        min_dt = min([x['dt'] for x in stats_short.values()])
-        max_t = max([x['last_t'] for x in stats_short.values()])
-        min_t = min([x['first_t'] for x in stats_short.values() if x['first_t'] > 0])
+        min_dt = min(x['dt'] for x in stats_short.values())
+        max_t = max(x['last_t'] for x in stats_short.values())
+        min_t = min(x['first_t'] for x in stats_short.values() if x['first_t'] > 0)
         time_stats = {'time': max_t, 'dt': min_dt, 'start': min_t}
         stats_short['HEALTH'] = health_stats = {
             'buckets': {k: n.buckets for k, n in cls.dat.items()},

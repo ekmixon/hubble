@@ -23,7 +23,7 @@ def genkey(key_type='rsa', rsa_key_size=1024, rsa_public_exponent=65537, **args)
         return ed448.Ed448PrivateKey.generate()
     elif key_type == 'ed25519':
         return ed25519.Ed25519PrivateKey.generate()
-    raise ValueError('Unknown key_type={}'.format(key_type))
+    raise ValueError(f'Unknown key_type={key_type}')
 
 def as_pem(key):
     if isinstance(key, (rsa.RSAPrivateKey, ed448.Ed448PrivateKey, ed25519.Ed25519PrivateKey)):
@@ -37,7 +37,7 @@ def as_pem(key):
             format=serialization.PublicFormat.SubjectPublicKeyInfo)
     elif isinstance(key, x509.Certificate):
         return key.public_bytes(encoding=serialization.Encoding.PEM)
-    raise ValueError('Unhandled key class {}'.format(type(key)))
+    raise ValueError(f'Unhandled key class {type(key)}')
 
 class Authority:
     def __init__(self, key, crt):
@@ -48,10 +48,10 @@ def gen_CA(fname='ca-root', cn='ca-root', path_length=0, authority=None, pdir=DE
     private_key = genkey(**args)
     public_key  = private_key.public_key()
 
-    with open(os.path.join(pdir, fname + '.key'), 'wb') as fh:
+    with open(os.path.join(pdir, f'{fname}.key'), 'wb') as fh:
         fh.write( as_pem(private_key) )
 
-    with open(os.path.join(pdir, fname + '.unsigned'), 'wb') as fh:
+    with open(os.path.join(pdir, f'{fname}.unsigned'), 'wb') as fh:
         fh.write( as_pem(public_key) )
 
     ksec_100 = datetime.timedelta(0, 100e3, 0)
@@ -73,8 +73,8 @@ def gen_CA(fname='ca-root', cn='ca-root', path_length=0, authority=None, pdir=DE
 
     builder = builder.subject_name(subject)
     builder = builder.issuer_name(issuer)
-    builder = builder.not_valid_before(datetime.datetime.today() - ksec_100)
-    builder = builder.not_valid_after(datetime.datetime.today() + Msec_300)
+    builder = builder.not_valid_before(datetime.datetime.now() - ksec_100)
+    builder = builder.not_valid_after(datetime.datetime.now() + Msec_300)
     builder = builder.serial_number(x509.random_serial_number())
     builder = builder.public_key(public_key)
 
@@ -113,7 +113,7 @@ def gen_CA(fname='ca-root', cn='ca-root', path_length=0, authority=None, pdir=DE
 
     certificate = builder.sign(**signing_args)
 
-    with open(os.path.join(pdir, fname + '.crt'), 'wb') as fh:
+    with open(os.path.join(pdir, f'{fname}.crt'), 'wb') as fh:
         fh.write( as_pem(certificate) )
 
     return Authority(private_key, certificate)
@@ -125,10 +125,10 @@ def gen_leaf(authority, fname_template='{}', cn='Certy Cert McCertFace', pdir=DE
     private_name = fname_template.format('private')
     public_name = fname_template.format('public')
 
-    with open(os.path.join(pdir, private_name + '.key'), 'wb') as fh:
+    with open(os.path.join(pdir, f'{private_name}.key'), 'wb') as fh:
         fh.write( as_pem(private_key) )
 
-    with open(os.path.join(pdir, public_name + '.unsigned'), 'wb') as fh:
+    with open(os.path.join(pdir, f'{public_name}.unsigned'), 'wb') as fh:
         fh.write( as_pem(public_key) )
 
     ksec_100 = datetime.timedelta(0, 100e3, 0)
@@ -146,8 +146,8 @@ def gen_leaf(authority, fname_template='{}', cn='Certy Cert McCertFace', pdir=DE
 
     builder = builder.subject_name(subject)
     builder = builder.issuer_name(authority.crt.subject)
-    builder = builder.not_valid_before(datetime.datetime.today() - ksec_100)
-    builder = builder.not_valid_after(datetime.datetime.today() + Msec_300)
+    builder = builder.not_valid_before(datetime.datetime.now() - ksec_100)
+    builder = builder.not_valid_after(datetime.datetime.now() + Msec_300)
     builder = builder.serial_number(x509.random_serial_number())
     builder = builder.public_key(public_key)
 
@@ -185,7 +185,7 @@ def gen_leaf(authority, fname_template='{}', cn='Certy Cert McCertFace', pdir=DE
 
     certificate = builder.sign(**signing_args)
 
-    with open(os.path.join(pdir, public_name + '.crt'), 'wb') as fh:
+    with open(os.path.join(pdir, f'{public_name}.crt'), 'wb') as fh:
         fh.write( as_pem(certificate) )
 
     return Authority(private_key, certificate)
@@ -204,7 +204,7 @@ def main(root_cn, int1_cn, int2_cn, **args):
 
     with open(os.path.join(args['pdir'], 'bundle.pem'), 'wb') as ofh:
         for i in range(1,3):
-            with open(os.path.join(args['pdir'], 'intermediate-{}.crt'.format(i)), 'rb') as ifh:
+            with open(os.path.join(args['pdir'], f'intermediate-{i}.crt'), 'rb') as ifh:
                 ofh.write(ifh.read())
 
 if __name__ == '__main__':

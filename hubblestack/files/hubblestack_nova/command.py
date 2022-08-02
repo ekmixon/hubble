@@ -141,9 +141,8 @@ def audit(data_list, tags, labels, **kwargs):
                                 if command_args.get('match_output_regex'):
                                     if not re.match(command_args['match_output'], line):
                                         found = False
-                                else:  # match without regex
-                                    if command_args['match_output'] not in line:
-                                        found = False
+                                elif command_args['match_output'] not in line:
+                                    found = False
 
                         if command_args.get('fail_if_matched'):
                             found = not found
@@ -157,11 +156,10 @@ def audit(data_list, tags, labels, **kwargs):
                         ret['Success'].append(tag_data)
                     else:
                         ret['Failure'].append(tag_data)
-                else:  # assume 'and' if it's not 'or'
-                    if all(command_results):
-                        ret['Success'].append(tag_data)
-                    else:
-                        ret['Failure'].append(tag_data)
+                elif all(command_results):
+                    ret['Success'].append(tag_data)
+                else:
+                    ret['Failure'].append(tag_data)
 
     return ret
 
@@ -214,7 +212,7 @@ def _get_tags(data):
                 ret[tag] = []
             formatted_data = {'tag': tag,
                               'module': 'command'}
-            formatted_data.update(audit_data)
+            formatted_data |= audit_data
             formatted_data.update(tags)
             formatted_data.pop('data')
             ret[tag].append(formatted_data)

@@ -169,11 +169,10 @@ def _compare_dictionary_values(audit_id, result_to_compare, args, errors):
     for key, value in result_to_compare.items():
         if isinstance(value, dict):
             _compare_dictionary_values(audit_id, value, args, errors)
-        else:
-            if 'type' in args:
-                ret_status, ret_val = hubblestack.module_runner.comparator.run(audit_id, args, value)
-                if not ret_status:
-                    errors.append(ret_val)
+        elif 'type' in args:
+            ret_status, ret_val = hubblestack.module_runner.comparator.run(audit_id, args, value)
+            if not ret_status:
+                errors.append(ret_val)
 
 
 def compare_all_values(audit_id, result_to_compare, args):
@@ -298,7 +297,7 @@ def match_any_if_keyvalue_matches(audit_id, result_to_compare, args):
         key_found = to_match_dict.get(key_name, None)
         if key_found is None:
             return True, "pass_as_keyvalue_not_found"
-        
+
         to_compare_val1 = runner_utils.apply_case_on_string(result_to_compare[key_name], ignore_case)
         to_compare_val2 = runner_utils.apply_case_on_string(to_match_dict[key_name], ignore_case)
         if to_compare_val1 == to_compare_val2:
@@ -326,11 +325,17 @@ def match_key_any(audit_id, result_to_compare, args):
     """
     log.debug('Running dict::match_key_any for audit_id: {0}'.format(audit_id))
 
-    for key_to_match in args['match_key_any']:
-        if key_to_match in result_to_compare:
-            return True, 'dict::match_key_any passed for key: {0}'.format(key_to_match)
-
-    return False, 'dict::match_key_any failed'
+    return next(
+        (
+            (
+                True,
+                'dict::match_key_any passed for key: {0}'.format(key_to_match),
+            )
+            for key_to_match in args['match_key_any']
+            if key_to_match in result_to_compare
+        ),
+        (False, 'dict::match_key_any failed'),
+    )
 
 
 def match_key_all(audit_id, result_to_compare, args):
@@ -344,12 +349,11 @@ def match_key_all(audit_id, result_to_compare, args):
     """
     log.debug('Running dict::match_key_all for audit_id: {0}'.format(audit_id))
 
-    errors = []
-    for key_to_match in args['match_key_all']:
-        if key_to_match not in result_to_compare:
-            errors.append('key={0} not found'.format(key_to_match))
-
-    if errors:
+    if errors := [
+        'key={0} not found'.format(key_to_match)
+        for key_to_match in args['match_key_all']
+        if key_to_match not in result_to_compare
+    ]:
         error_message = 'dict::match_key_all failed, errors={0}'.format(str(errors))
         return False, error_message
     return True, "dict::match_key_all passed"

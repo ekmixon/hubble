@@ -63,9 +63,7 @@ def wait_lock(lk_fn, dest, wait_timeout=0):
         if not os.path.isfile(dest):
             _unlock_cache(lk_fn)
             return False
-    timeout = None
-    if wait_timeout:
-        timeout = time.time() + wait_timeout
+    timeout = time.time() + wait_timeout if wait_timeout else None
     # There is a lock file, the dest is there, stat the dest, sleep and check
     # that the dest is being written, if it is not being written kill the lock
     # file and continue. Also check if the lock file is gone.
@@ -84,13 +82,12 @@ def wait_lock(lk_fn, dest, wait_timeout=0):
                 return False
         else:
             s_size = size
-        if timeout:
-            if time.time() > timeout:
-                raise ValueError(
-                    'Timeout({0}s) for {1} (lock: {2}) elapsed'.format(
-                        wait_timeout, dest, lk_fn
-                    )
+        if timeout and time.time() > timeout:
+            raise ValueError(
+                'Timeout({0}s) for {1} (lock: {2}) elapsed'.format(
+                    wait_timeout, dest, lk_fn
                 )
+            )
     return False
 
 
@@ -212,14 +209,7 @@ def diff_mtime_map(map1, map2):
     if sorted(map1) != sorted(map2):
         return True
 
-    # map1 and map2 are guaranteed to have same keys,
-    # so compare mtimes
-    for filename, mtime in iter(map1.items()):
-        if map2[filename] != mtime:
-            return True
-
-    # we made it, that means we have no changes
-    return False
+    return any(map2[filename] != mtime for filename, mtime in iter(map1.items()))
 
 
 def check_file_list_cache(opts, form, list_cache, w_lock):
@@ -345,12 +335,11 @@ class Fileserver(object):
         '''
         if not back:
             back = self.opts['fileserver_backend']
-        else:
-            if not isinstance(back, list):
-                try:
-                    back = back.split(',')
-                except AttributeError:
-                    back = str(back).split(',')
+        elif not isinstance(back, list):
+            try:
+                back = back.split(',')
+            except AttributeError:
+                back = str(back).split(',')
 
         if isinstance(back, Sequence):
             # The test suite uses an ImmutableList type (based on
@@ -416,8 +405,7 @@ class Fileserver(object):
             fstr = '{0}.clear_cache'.format(fsb)
             if fstr in self.servers:
                 log.debug('Clearing %s fileserver cache', fsb)
-                failed = self.servers[fstr]()
-                if failed:
+                if failed := self.servers[fstr]():
                     errors.extend(failed)
                 else:
                     cleared.append(
@@ -509,22 +497,18 @@ class Fileserver(object):
         Return the environments for the named backend or all backends
         '''
         back = self.backends(back)
-        ret = set()
-        if sources:
-            ret = {}
+        ret = {} if sources else set()
         for fsb in back:
             fstr = '{0}.envs'.format(fsb)
             kwargs = {'ignore_cache': True} \
-                if 'ignore_cache' in _argspec(self.servers[fstr]).args \
-                and self.opts['__role'] == 'minion' \
-                else {}
+                    if 'ignore_cache' in _argspec(self.servers[fstr]).args \
+                    and self.opts['__role'] == 'minion' \
+                    else {}
             if sources:
                 ret[fsb] = self.servers[fstr](**kwargs)
             else:
                 ret.update(self.servers[fstr](**kwargs))
-        if sources:
-            return ret
-        return list(ret)
+        return ret if sources else list(ret)
 
     def file_envs(self, load=None):
         '''
@@ -585,17 +569,16 @@ class Fileserver(object):
         if hubblestack.utils.url.is_escaped(path):
             # don't attempt to find URL query arguments in the path
             path = hubblestack.utils.url.unescape(path)
-        else:
-            if '?' in path:
-                hcomps = path.split('?')
-                path = hcomps[0]
-                comps = hcomps[1].split('&')
-                for comp in comps:
-                    if '=' not in comp:
-                        # Invalid option, skip it
-                        continue
-                    args = comp.split('=', 1)
-                    kwargs[args[0]] = args[1]
+        elif '?' in path:
+            hcomps = path.split('?')
+            path = hcomps[0]
+            comps = hcomps[1].split('&')
+            for comp in comps:
+                if '=' not in comp:
+                    # Invalid option, skip it
+                    continue
+                args = comp.split('=', 1)
+                kwargs[args[0]] = args[1]
 
         if 'env' in kwargs:
             # "env" is not supported; Use "saltenv".
@@ -635,9 +618,7 @@ class Fileserver(object):
         if not fnd.get('back'):
             return ret
         fstr = '{0}.serve_file'.format(fnd['back'])
-        if fstr in self.servers:
-            return self.servers[fstr](load, fnd)
-        return ret
+        return self.servers[fstr](load, fnd) if fstr in self.servers else ret
 
     def __file_hash_and_stat(self, load):
         '''
@@ -737,7 +718,7 @@ class Fileserver(object):
                     # Filename does not end in ".p". Not a cache file, ignore.
                     continue
                 elif back_virtualname not in fsb or \
-                        (saltenv is not None and cache_saltenv not in saltenv):
+                            (saltenv is not None and cache_saltenv not in saltenv):
                     log.debug(
                         'Skipping %s file list cache for saltenv \'%s\'',
                         back, cache_saltenv

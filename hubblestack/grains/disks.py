@@ -74,10 +74,9 @@ def _datavalue(datatype, data):
         except ValueError:
             return None
     elif datatype is tuple and datatype[0] == 're_int':
-        search = re.search(datatype[1], data)
-        if search:
+        if search := re.search(datatype[1], data):
             try:
-                return int(search.group(1))
+                return int(search[1])
             except ValueError:
                 return None
         return None
@@ -102,8 +101,7 @@ def _freebsd_geom():
             for attrib in _geom_attribs:
                 search = re.search(r'{0}:\s(.*)'.format(attrib), line)
                 if search:
-                    value = _datavalue(_geomconsts._datatypes.get(attrib),
-                                       search.group(1))
+                    value = _datavalue(_geomconsts._datatypes.get(attrib), search[1])
                     tmp[attrib] = value
                     if attrib in _geomconsts._aliases:
                         tmp[_geomconsts._aliases[attrib]] = value
@@ -174,16 +172,12 @@ def _windows_disks():
             mediatype = info[1]
             if mediatype == '3':
                 log.trace('Device %s reports itself as an HDD', device)
-                ret['disks'].append(device)
             elif mediatype == '4':
                 log.trace('Device %s reports itself as an SSD', device)
                 ret['SSDs'].append(device)
-                ret['disks'].append(device)
             elif mediatype == '5':
                 log.trace('Device %s reports itself as an SCM', device)
-                ret['disks'].append(device)
             else:
                 log.trace('Device %s reports itself as Unspecified', device)
-                ret['disks'].append(device)
-
+            ret['disks'].append(device)
     return ret

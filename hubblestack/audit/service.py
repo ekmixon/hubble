@@ -215,7 +215,7 @@ def validate_params(block_id, block_dict, extra_args=None):
     if not name:
         name = runner_utils.get_param_for_module(block_id, block_dict, 'name')
     if not name:
-        error['name'] = 'Mandatory parameter: name not found for id: %s' % (block_id)
+        error['name'] = f'Mandatory parameter: name not found for id: {block_id}'
 
     if error:
         raise HubbleCheckValidationError(error)

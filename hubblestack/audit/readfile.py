@@ -350,16 +350,14 @@ def _handle_file_helper(file_format, block_id, path, subkey=None, sep=None, chai
         return runner_utils.prepare_negative_result_for_module(block_id, 'exception while reading file')
 
     if subkey:
-        subkey = [subkey] if not sep else subkey.split(sep)
+        subkey = subkey.split(sep) if sep else [subkey]
         try:
             # Traverse dictionary
             for key in subkey:
                 if not isinstance(ret, dict):
                     # If it's not a dict, assume it's a list and that `key` is an int
                     key = int(key)
-                if key in ret:
-                    ret = ret[key]
-                elif isinstance(key, int):
+                if key in ret or isinstance(key, int):
                     ret = ret[key]
                 else:
                     log.error("key '%s' not found in dictionary '%s'", key, ret)
@@ -536,10 +534,9 @@ def _lines_as_dict(path, pattern, ignore_pattern, dictsep, valsep, subsep):
                 if key in found_keys and key not in processed_keys:
                     # Duplicate keys, make it a list of values underneath
                     # and add to list of values
-                    ret[key] = [ret[key]]
-                    ret[key].append(val)
+                    ret[key] = [ret[key], val]
                     processed_keys.add(key)
-                elif key in found_keys and key in processed_keys:
+                elif key in found_keys:
                     # Duplicate keys, add to list of values
                     ret[key].append(val)
                 else:
@@ -560,11 +557,8 @@ def _check_pattern(line, pattern, ignore_pattern):
     """
     keep = False
 
-    if pattern is None:
+    if pattern is None or pattern is not None and re.match(pattern, line):
         keep = True
-    elif re.match(pattern, line):
-        keep = True
-
     if ignore_pattern is not None and re.match(ignore_pattern, line):
         keep = False
 

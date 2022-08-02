@@ -84,13 +84,7 @@ def __virtual__():
     if not HAS_AZURE:
         return False
 
-    if 'azurefs' not in __opts__:
-        return False
-
-    if not _validate_config():
-        return False
-
-    return True
+    return False if 'azurefs' not in __opts__ else bool(_validate_config())
 
 
 @find_wrapf(not_found={'path': '', 'rel': ''})
@@ -133,9 +127,11 @@ def envs():
     Each container configuration can have an environment setting, or defaults
     to base
     """
-    saltenvs = []
-    for container in __opts__.get('azurefs', []):
-        saltenvs.append(container.get('saltenv', 'base'))
+    saltenvs = [
+        container.get('saltenv', 'base')
+        for container in __opts__.get('azurefs', [])
+    ]
+
     # Remove duplicates
     return list(set(saltenvs))
 
@@ -146,8 +142,8 @@ def serve_file(load, fnd):
     """
     ret = {'data': '',
            'dest': ''}
-    required_load_keys = set(['path', 'loc', 'saltenv'])
-    if not all(x in load for x in required_load_keys):
+    required_load_keys = {'path', 'loc', 'saltenv'}
+    if any(x not in load for x in required_load_keys):
         log.debug(
             'Not all of the required keys present in payload. '
             'Missing: {0}'.format(
@@ -199,18 +195,17 @@ def update():
         blobs_data = []
         try:
             blob_list = blob_service.list_blobs()
-            for blob in blob_list:
-                # list_blobs returns an iterator
-                # and we iterate over it more than once
-                blobs_data.append(blob)
+            blobs_data.extend(iter(blob_list))
         except Exception as exc:
             log.exception('Error occurred fetching blob list for azurefs')
 
-            if not __opts__['delete_inaccessible_azure_containers'] \
-               or ( not "<class 'azure.common.AzureHttpError'>" in str(type(exc)) \
-                    and \
-                    not "<class 'azure.common.AzureMissingResourceHttpError'>" in str(type(exc))
-                    ):
+            if (
+                not __opts__['delete_inaccessible_azure_containers']
+                or "<class 'azure.common.AzureHttpError'>"
+                not in str(type(exc))
+                and "<class 'azure.common.AzureMissingResourceHttpError'>"
+                not in str(type(exc))
+            ):
                 continue
 
             if '<Code>AuthenticationFailed</Code>' in str(exc) \
@@ -224,7 +219,7 @@ def update():
                 log.debug('Trying to delete the cache of container "{0}"'.format(name))
                 try:
                     container_cachedir = os.path.join(__opts__['cachedir'], 'azurefs',container_cache_folder)
-                    container_filelist = container_cachedir + '.list'
+                    container_filelist = f'{container_cachedir}.list'
                     if os.path.exists(container_cachedir):
                         shutil.rmtree(container_cachedir)
                     if os.path.exists(container_filelist):
@@ -241,7 +236,7 @@ def update():
                 fname = os.path.join(root, f)
                 relpath = os.path.relpath(fname, path)
                 if relpath not in blob_set:
-                    hubblestack.fileserver.wait_lock(fname + '.lk', fname)
+                    hubblestack.fileserver.wait_lock(f'{fname}.lk', fname)
                     try:
                         os.unlink(fname)
                     except Exception:
@@ -266,7 +261,7 @@ def update():
                 if not os.path.exists(os.path.dirname(fname)):
                     os.makedirs(os.path.dirname(fname))
                 # Lock writes
-                lk_fn = fname + '.lk'
+                lk_fn = f'{fname}.lk'
                 hubblestack.fileserver.wait_lock(lk_fn, fname)
                 with hubblestack.utils.files.fopen(lk_fn, 'w+') as fp_:
                     fp_.write('')
@@ -279,10 +274,13 @@ def update():
                 except Exception as exc:
                     log.exception('Error occurred fetching blob from azurefs')
 
-                    if not __opts__['delete_inaccessible_azure_containers'] \
-                       or ( not "<class 'azure.common.AzureHttpError'>" in str(type(exc)) and \
-                            not "<class 'azure.common.AzureMissingResourceHttpError'>" in str(type(exc))
-                            ):
+                    if (
+                        not __opts__['delete_inaccessible_azure_containers']
+                        or "<class 'azure.common.AzureHttpError'>"
+                        not in str(type(exc))
+                        and "<class 'azure.common.AzureMissingResourceHttpError'>"
+                        not in str(type(exc))
+                    ):
                         continue
 
                     if '<Code>AuthenticationFailed</Code>' in str(exc) \
@@ -306,8 +304,8 @@ def update():
                     pass
 
         # Write out file list
-        container_list = path + '.list'
-        lk_fn = container_list + '.lk'
+        container_list = f'{path}.list'
+        lk_fn = f'{container_list}.lk'
         hubblestack.fileserver.wait_lock(lk_fn, container_list)
         with hubblestack.utils.files.fopen(lk_fn, 'w+') as fp_:
             fp_.write('')
@@ -330,7 +328,7 @@ def file_hash(load, fnd):
     """
     Return a file hash based on the hash type set in the master config
     """
-    if not all(x in load for x in ('path', 'saltenv')):
+    if any(x not in load for x in ('path', 'saltenv')):
         return '', None
     ret = {'hash_type': __opts__['hash_type']}
     relpath = fnd['rel']
@@ -346,11 +344,11 @@ def file_hash(load, fnd):
         ret['hsum'] = hubblestack.utils.hashutils.get_hash(path, __opts__['hash_type'])
         with hubblestack.utils.files.fopen(hashdest, 'w+') as fp_:
             fp_.write(ret['hsum'])
-        return ret
     else:
         with hubblestack.utils.files.fopen(hashdest, 'rb') as fp_:
             ret['hsum'] = fp_.read()
-        return ret
+
+    return ret
 
 
 def file_list(load):
@@ -362,8 +360,8 @@ def file_list(load):
         for container in __opts__['azurefs']:
             if container.get('saltenv', 'base') != load['saltenv']:
                 continue
-            container_list = _get_container_path(container) + '.list'
-            lk = container_list + '.lk'
+            container_list = f'{_get_container_path(container)}.list'
+            lk = f'{container_list}.lk'
             hubblestack.fileserver.wait_lock(lk, container_list, 5)
             if not os.path.exists(container_list):
                 continue
@@ -413,7 +411,7 @@ def _get_container_service(container):
     Try account_key, sas_token, and no auth in that order
     """
     account_url = f'https://{container["account_name"]}.blob.core.windows.net'
-    
+
     proxies = None
     if 'proxy' in container:
         proxies = {'http': container['proxy']}

@@ -266,7 +266,7 @@ def refresh_db(cache_valid_time=0, failhard=False):
     hubblestack.utils.pkg.clear_rtag(__opts__)
     failhard = hubblestack.utils.data.is_true(failhard)
     ret = {}
-    error_repos = list()
+    error_repos = []
 
     if cache_valid_time:
         try:
@@ -321,9 +321,10 @@ def _call_apt(args, scope=True, **kwargs):
         cmd.extend(['systemd-run', '--scope'])
     cmd.extend(args)
 
-    params = {'output_loglevel': 'trace',
-              'python_shell': False,
-              'env': hubblestack.utils.environment.get_module_environment(globals())}
-    params.update(kwargs)
+    params = {
+        'output_loglevel': 'trace',
+        'python_shell': False,
+        'env': hubblestack.utils.environment.get_module_environment(globals()),
+    } | kwargs
 
     return __mods__['cmd.run_all'](cmd, **params)

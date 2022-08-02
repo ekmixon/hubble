@@ -49,12 +49,7 @@ def match(tgt, opts=None):
     results = []
     opers = ["and", "or", "not", "(", ")"]
 
-    if isinstance(tgt, str):
-        words = tgt.split()
-    else:
-        # we make a shallow copy in order to not affect the passed in arg
-        words = tgt[:]
-
+    words = tgt.split() if isinstance(tgt, str) else tgt[:]
     while words:
         word = words.pop(0)
         target_info = hubblestack.utils.minions.parse_target(word)
@@ -65,24 +60,17 @@ def match(tgt, opts=None):
                 if results[-1] == "(" and word in ("and", "or"):
                     log.error('Invalid beginning operator after "(": %s', word)
                     return False
-                if word == "not":
-                    if not results[-1] in ("and", "or", "("):
-                        results.append("and")
-                results.append(word)
-            else:
-                # seq start with binary oper, fail
-                if word not in ["(", "not"]:
-                    log.error("Invalid beginning operator: %s", word)
-                    return False
-                results.append(word)
-
+                if word == "not" and results[-1] not in ("and", "or", "("):
+                    results.append("and")
+            elif word not in ["(", "not"]:
+                log.error("Invalid beginning operator: %s", word)
+                return False
+            results.append(word)
         elif target_info and target_info["engine"]:
-            if "N" == target_info["engine"]:
-                # if we encounter a node group, just evaluate it in-place
-                decomposed = hubblestack.utils.minions.nodegroup_comp(
+            if target_info["engine"] == "N":
+                if decomposed := hubblestack.utils.minions.nodegroup_comp(
                     target_info["pattern"], nodegroups
-                )
-                if decomposed:
+                ):
                     words = decomposed + words
                 continue
 

@@ -151,9 +151,7 @@ def _get_tags(data):
                 tags = tags_dict.get('*', [])
             if isinstance(tags, dict):
                 # malformed yaml, convert to list of dicts
-                tmp = []
-                for name, tag in tags.items():
-                    tmp.append({name: tag})
+                tmp = [{name: tag} for name, tag in tags.items()]
                 tags = tmp
             for item in tags:
                 for name, tag in item.items():
@@ -165,7 +163,7 @@ def _get_tags(data):
                     formatted_data = {'name': name,
                                       'tag': tag,
                                       'module': 'sysctl'}
-                    formatted_data.update(tag_data)
+                    formatted_data |= tag_data
                     formatted_data.update(audit_data)
                     formatted_data.pop('data')
                     ret[tag].append(formatted_data)

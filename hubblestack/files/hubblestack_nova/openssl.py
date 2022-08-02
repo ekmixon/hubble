@@ -93,9 +93,11 @@ __data__ = None
 def __virtual__():
     if hubblestack.utils.platform.is_windows():
         return False, 'This audit module only runs on linux'
-    if not _HAS_OPENSSL:
-        return (False, 'The python-OpenSSL library is missing')
-    return True
+    return (
+        True
+        if _HAS_OPENSSL
+        else (False, 'The python-OpenSSL library is missing')
+    )
 
 def apply_labels(__data__, labels):
     """
@@ -241,8 +243,11 @@ def _load_x509(cert):
 
 
 def _get_cert(source, port=443, from_file=False):
-    cert = _get_cert_from_file(source) if from_file else _get_cert_from_endpoint(source, port)
-    return cert
+    return (
+        _get_cert_from_file(source)
+        if from_file
+        else _get_cert_from_endpoint(source, port)
+    )
 
 
 def _get_cert_from_endpoint(server, port=443):
@@ -251,10 +256,7 @@ def _get_cert_from_endpoint(server, port=443):
     except Exception:
         log.error('Unable to retrieve certificate from {0}'.format(server))
         cert = None
-    if not cert:
-        return None
-
-    return cert
+    return cert or None
 
 
 def _get_cert_from_file(cert_file_path):
@@ -274,7 +276,11 @@ def _get_x509_days_left(x509):
     not_after = time.strptime(x509.get_notAfter().decode(), date_fmt)
     not_before = time.strptime(x509.get_notBefore().decode(), date_fmt)
 
-    ret = {'not_after': (datetime.datetime(*not_after[:6]) - current_datetime).days,
-           'not_before': (datetime.datetime(*not_before[:6]) - current_datetime).days}
-
-    return ret
+    return {
+        'not_after': (
+            datetime.datetime(*not_after[:6]) - current_datetime
+        ).days,
+        'not_before': (
+            datetime.datetime(*not_before[:6]) - current_datetime
+        ).days,
+    }

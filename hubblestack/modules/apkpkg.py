@@ -44,17 +44,18 @@ def list_pkgs(versions_as_list=False, **kwargs):
     '''
     versions_as_list = hubblestack.utils.data.is_true(versions_as_list)
     # not yet implemented or not applicable
-    if any([hubblestack.utils.data.is_true(kwargs.get(x))
-            for x in ('removed', 'purge_desired')]):
+    if any(
+        hubblestack.utils.data.is_true(kwargs.get(x))
+        for x in ('removed', 'purge_desired')
+    ):
         return {}
 
     if 'pkg.list_pkgs' in __context__:
         if versions_as_list:
             return __context__['pkg.list_pkgs']
-        else:
-            ret = copy.deepcopy(__context__['pkg.list_pkgs'])
-            __mods__['pkg_resource.stringify'](ret)
-            return ret
+        ret = copy.deepcopy(__context__['pkg.list_pkgs'])
+        __mods__['pkg_resource.stringify'](ret)
+        return ret
 
     cmd = ['apk', 'info', '-v']
     ret = {}

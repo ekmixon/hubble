@@ -201,7 +201,7 @@ def validate_params(block_id, block_dict, extra_args=None):
         name = runner_utils.get_param_for_module(block_id, block_dict, 'name')
 
     if not name:
-        error['name'] = 'Mandatory parameter: name not found for id: %s' %(block_id)
+        error['name'] = f'Mandatory parameter: name not found for id: {block_id}'
 
     if error:
         raise HubbleCheckValidationError(error)
@@ -233,7 +233,10 @@ def execute(block_id, block_dict, extra_args=None):
     sysctl_res = __mods__['sysctl.get'](name)
     result = {name: sysctl_res}
     if not sysctl_res or "No such file or directory" in sysctl_res:
-        return runner_utils.prepare_negative_result_for_module(block_id, "Could not find attribute %s in the kernel" %(name))
+        return runner_utils.prepare_negative_result_for_module(
+            block_id, f"Could not find attribute {name} in the kernel"
+        )
+
     if sysctl_res.lower().startswith("error"):
         return runner_utils.prepare_negative_result_for_module(block_id, "An error occurred while reading the value "
                                                                          "of kernel attribute %s" %(name))

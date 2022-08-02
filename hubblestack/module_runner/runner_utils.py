@@ -80,6 +80,4 @@ def apply_case_on_string(arg, ignore_case=False):
     If the arg is string, and ignore_case is true. returns the lower-case
     Else, just return the arg
     """
-    if arg and isinstance(arg, str) and ignore_case:
-        return arg.lower()
-    return arg
+    return arg.lower() if arg and isinstance(arg, str) and ignore_case else arg

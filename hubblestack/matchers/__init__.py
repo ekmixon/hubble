@@ -33,22 +33,22 @@ def __define_global_system_encoding_variable__():
 
         # This is now garbage collectable
         del locale
-        if not encoding:
-            # This is most likely ascii which is not the best but we were
-            # unable to find a better encoding. If this fails, we fall all
-            # the way back to ascii
-            encoding = sys.getdefaultencoding()
-        if not encoding:
-            if sys.platform.startswith("darwin"):
-                # Mac OS X uses UTF-8
-                encoding = "utf-8"
-            elif sys.platform.startswith("win"):
-                # Windows uses a configurable encoding; on Windows, Python uses the name “mbcs”
-                # to refer to whatever the currently configured encoding is.
-                encoding = "mbcs"
-            else:
-                # On linux default to ascii as a last resort
-                encoding = "ascii"
+    if not encoding:
+        # This is most likely ascii which is not the best but we were
+        # unable to find a better encoding. If this fails, we fall all
+        # the way back to ascii
+        encoding = sys.getdefaultencoding()
+    if not encoding:
+        if sys.platform.startswith("darwin"):
+            # Mac OS X uses UTF-8
+            encoding = "utf-8"
+        elif sys.platform.startswith("win"):
+            # Windows uses a configurable encoding; on Windows, Python uses the name “mbcs”
+            # to refer to whatever the currently configured encoding is.
+            encoding = "mbcs"
+        else:
+            # On linux default to ascii as a last resort
+            encoding = "ascii"
 
     import builtins  # pylint: disable=import-error
 

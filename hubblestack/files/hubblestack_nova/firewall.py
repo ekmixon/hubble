@@ -93,9 +93,14 @@ __data__ = None
 def __virtual__():
     if hubblestack.utils.platform.is_windows():
         return False, 'This audit module only runs on linux'
-    if not hubblestack.utils.path.which('iptables'):
-        return (False, 'The iptables execution module cannot be loaded: iptables not installed.')
-    return True
+    return (
+        True
+        if hubblestack.utils.path.which('iptables')
+        else (
+            False,
+            'The iptables execution module cannot be loaded: iptables not installed.',
+        )
+    )
 
 def apply_labels(__data__, labels):
     """
@@ -156,7 +161,7 @@ def audit(data_list, tags, labels, debug=False, **kwargs):
                 if 'family' in tag_data['rule']:
                     tag_data['rule'].pop('family')
 
-                args.update(tag_data['rule'])
+                args |= tag_data['rule']
 
                 # building the rule using iptables.build_rule
                 rule = __mods__['iptables.build_rule'](**args)
