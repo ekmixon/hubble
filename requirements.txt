@@ -39,7 +39,7 @@ pytest-html
 pytest-pythonpath
 python-dateutil
 pyyaml
-requests>=2.13.0
+requests>=2.32.0
 saltpylint
 singledispatch
 smmap2
